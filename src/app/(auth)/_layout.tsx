@@ -1,3 +1,4 @@
+// defines the order of screens
 import { Stack } from 'expo-router';
 import { AuthFlowProvider } from '@/contexts/auth-flow-context';
 
