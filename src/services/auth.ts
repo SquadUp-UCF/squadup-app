@@ -1,4 +1,5 @@
-// Fake placeholder Ai
+// Fake placeholder Ai to simulate backend
+// will later be replaced with real backend/api
 
 export type AuthResponse = {
   token: string;

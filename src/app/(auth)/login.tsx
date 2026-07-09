@@ -1,7 +1,7 @@
-// login screen (login to app or be taken to register)
+// src/app/(auth)/login.tsx
 import { useState } from 'react';
 import { View, StyleSheet, Pressable, Text, ActivityIndicator } from 'react-native';
-import { Link } from 'expo-router';
+import { Link, router } from 'expo-router';
 import { TextField } from '@/components/ui/text-field';
 import { login } from '@/services/auth';
 
@@ -15,10 +15,8 @@ export default function LoginScreen() {
     setError('');
     setIsSubmitting(true);
     try {
-      const { token } = await login(email, password);
-      // TODO: once we have app-wide auth state, store `token` there and
-      // navigate into the main app. For now, just confirm it worked.
-      console.log('Logged in, token:', token);
+      await login(email, password);
+      router.replace('/home');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
     } finally {
@@ -37,6 +35,8 @@ export default function LoginScreen() {
         placeholder="you@ucf.edu"
         keyboardType="email-address"
         autoCapitalize="none"
+        autoCorrect={false}
+        spellCheck={false}
       />
       <TextField
         label="Password"
@@ -44,6 +44,8 @@ export default function LoginScreen() {
         onChangeText={setPassword}
         placeholder="Password"
         secureTextEntry
+        autoCorrect={false}
+        spellCheck={false}
       />
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
