@@ -1,47 +1,198 @@
 // main feed
 import { useCallback, useState } from 'react';
-import { View, StyleSheet, Text, Pressable, FlatList, ActivityIndicator } from 'react-native';
+import { FlatList, Modal, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
 import { GameCard } from '@/components/games/game-card';
-import { discoverGames } from '@/services/games';
+import { ConfirmModal } from '@/components/games/confirm-modal';
+import { JoinPartySizeModal } from '@/components/games/join-party-size-modal';
+import { Logo } from '@/components/ui/logo';
+import { discoverGames, deleteGame, joinGame, leaveGame } from '@/services/games';
+import { useSession } from '@/contexts/session-context';
+import { colors, fonts, fontSizes, radii, spacing } from '@/constants/theme';
 import type { Game } from '@/types/game';
 
 export default function HomeScreen() {
+  const { user, logout } = useSession();
   const [games, setGames] = useState<Game[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const [showAccountMenu, setShowAccountMenu] = useState(false);
+  const [joiningId, setJoiningId] = useState<string | null>(null);
+  const [leavingId, setLeavingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [joinTarget, setJoinTarget] = useState<Game | null>(null);
+  const [joinError, setJoinError] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState<Game | null>(null);
+
+  const loadGames = useCallback(() => {
+    return discoverGames().then((data) => setGames(data));
+  }, []);
 
   // Re-runs every time this screen comes back into focus (not just on first
   // mount) — so returning from Post Game picks up the newly created game.
   useFocusEffect(
     useCallback(() => {
       setIsLoading(true);
-      discoverGames().then((data) => {
-        setGames(data);
-        setIsLoading(false);
-      });
-    }, [])
+      loadGames().finally(() => setIsLoading(false));
+    }, [loadGames])
   );
 
+  async function handleRefresh() {
+    setRefreshing(true);
+    await loadGames();
+    setRefreshing(false);
+  }
+
+  async function handleJoinConfirmed(partySize: number) {
+    if (!joinTarget || !user) return;
+    setJoinError('');
+    setJoiningId(joinTarget.id);
+    try {
+      await joinGame(joinTarget.id, user.id, partySize);
+      await loadGames();
+      setJoinTarget(null);
+    } catch {
+      setJoinError('Could not join the game.');
+    } finally {
+      setJoiningId(null);
+    }
+  }
+
+  async function handleLeave(game: Game) {
+    if (!user) return;
+    setLeavingId(game.id);
+    try {
+      await leaveGame(game.id, user.id);
+      await loadGames();
+    } finally {
+      setLeavingId(null);
+    }
+  }
+
+  async function handleDeleteConfirmed() {
+    if (!confirmDelete) return;
+    setDeletingId(confirmDelete.id);
+    try {
+      await deleteGame(confirmDelete.id);
+      await loadGames();
+    } finally {
+      setDeletingId(null);
+      setConfirmDelete(null);
+    }
+  }
+
+  async function handleLogout() {
+    setShowAccountMenu(false);
+    await logout();
+    router.replace('/');
+  }
+
+  const initial = (user?.username || '?').slice(0, 2).toUpperCase();
+
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <Text style={styles.logo}>⚡ Squad-Up</Text>
-        <Pressable style={styles.postButton} onPress={() => router.push('/post-game')}>
-          <Text style={styles.postButtonText}>+ Post a game</Text>
-        </Pressable>
+        <View style={styles.brand}>
+          <Logo size={32} />
+          <Text style={styles.brandName}>Squad-Up</Text>
+        </View>
+
+        <View style={styles.headerActions}>
+          <Pressable style={styles.postButton} onPress={() => router.push('/post-game')}>
+            <Text style={styles.postButtonText}>+ Post a game</Text>
+          </Pressable>
+          <Pressable style={styles.avatar} onPress={() => setShowAccountMenu(true)}>
+            <Text style={styles.avatarText}>{initial}</Text>
+          </Pressable>
+        </View>
+      </View>
+
+      <View style={styles.hero}>
+        <View style={styles.liveBadge}>
+          <View style={styles.liveDot} />
+          <Text style={styles.liveBadgeText}>LIVE - UCF verified only</Text>
+        </View>
+        <Text style={styles.heroTitle}>Welcome{user?.username ? `, ${user.username}` : ''}</Text>
+        <Text style={styles.heroSubtitle}>Tap a game to join, or post your own.</Text>
       </View>
 
       {isLoading ? (
-        <ActivityIndicator style={styles.loading} />
+        <Text style={styles.loading}>Loading games…</Text>
+      ) : games.length === 0 ? (
+        <View style={styles.empty}>
+          <Text style={styles.emptyTitle}>No games yet</Text>
+          <Text style={styles.emptySub}>{'Be the first — hit "Post a game" to host one.'}</Text>
+        </View>
       ) : (
         <FlatList
           data={games}
           keyExtractor={(game) => game.id}
-          renderItem={({ item }) => <GameCard game={item} />}
+          renderItem={({ item }) => (
+            <GameCard
+              game={item}
+              currentUserId={user?.id}
+              onPress={() => router.push(`/game/${item.id}`)}
+              onJoin={(game) => {
+                setJoinError('');
+                setJoinTarget(game);
+              }}
+              joiningId={joiningId}
+              onLeave={handleLeave}
+              leavingId={leavingId}
+              onEdit={(game) => router.push({ pathname: '/post-game', params: { gameId: game.id } })}
+              onDelete={setConfirmDelete}
+              deletingId={deletingId}
+            />
+          )}
           contentContainerStyle={styles.list}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.green} />}
         />
       )}
-    </View>
+
+      <JoinPartySizeModal
+        game={joinTarget}
+        busy={joiningId === joinTarget?.id}
+        error={joinError}
+        onConfirm={handleJoinConfirmed}
+        onClose={() => setJoinTarget(null)}
+      />
+
+      <ConfirmModal
+        visible={Boolean(confirmDelete)}
+        title="Delete this game?"
+        message={
+          confirmDelete
+            ? `Your ${confirmDelete.sport} game at ${confirmDelete.location} will be permanently removed. This can't be undone.`
+            : ''
+        }
+        confirmLabel="Delete"
+        danger
+        busy={deletingId === confirmDelete?.id}
+        onConfirm={handleDeleteConfirmed}
+        onClose={() => setConfirmDelete(null)}
+      />
+
+      <Modal visible={showAccountMenu} transparent animationType="fade" onRequestClose={() => setShowAccountMenu(false)}>
+        <Pressable style={styles.menuBackdrop} onPress={() => setShowAccountMenu(false)}>
+          <View style={styles.menu}>
+            <Pressable
+              style={styles.menuItem}
+              onPress={() => {
+                setShowAccountMenu(false);
+                router.push('/profile');
+              }}
+            >
+              <Text style={styles.menuItemLabel}>Profile</Text>
+            </Pressable>
+            <Pressable style={styles.menuItem} onPress={handleLogout}>
+              <Text style={[styles.menuItemLabel, styles.menuItemDanger]}>Log out</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Modal>
+    </SafeAreaView>
   );
 }
 
@@ -51,12 +202,57 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
-    paddingTop: 60,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
   },
-  logo: { fontSize: 20, fontWeight: '700' },
-  postButton: { backgroundColor: '#2F6B3C', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
-  postButtonText: { color: '#fff', fontWeight: '600' },
-  loading: { marginTop: 40 },
-  list: { padding: 16 },
+  brand: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  brandName: { fontFamily: fonts.heading, fontSize: fontSizes.xl, color: colors.text },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  postButton: { backgroundColor: colors.green, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radii.pill },
+  postButtonText: { color: colors.white, fontFamily: fonts.bodyBold, fontSize: fontSizes.sm },
+  avatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.green,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: { color: colors.white, fontFamily: fonts.bodyBold, fontSize: fontSizes.sm },
+  hero: {
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.md,
+    padding: spacing.lg,
+    borderRadius: radii.lg,
+    backgroundColor: colors.greenDeep,
+    gap: 6,
+  },
+  liveBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', marginBottom: 4 },
+  liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#ff5555' },
+  liveBadgeText: { color: colors.greenAccent, fontFamily: fonts.bodyBold, fontSize: fontSizes.xs },
+  heroTitle: { color: colors.white, fontFamily: fonts.heading, fontSize: fontSizes.xxl },
+  heroSubtitle: { color: colors.greenAccent, fontFamily: fonts.body, fontSize: fontSizes.md },
+  loading: { marginTop: 40, textAlign: 'center', fontFamily: fonts.body, color: colors.muted },
+  empty: { alignItems: 'center', marginTop: 60, gap: 4, paddingHorizontal: spacing.xl },
+  emptyTitle: { fontFamily: fonts.headingBold, fontSize: fontSizes.lg, color: colors.text },
+  emptySub: { fontFamily: fonts.body, fontSize: fontSizes.md, color: colors.muted, textAlign: 'center' },
+  list: { padding: spacing.lg, paddingTop: 0 },
+  menuBackdrop: { flex: 1, backgroundColor: 'rgba(13,43,24,0.3)' },
+  menu: {
+    position: 'absolute',
+    top: 96,
+    right: spacing.lg,
+    backgroundColor: colors.white,
+    borderRadius: radii.md,
+    paddingVertical: spacing.xs,
+    minWidth: 160,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
+  },
+  menuItem: { paddingVertical: spacing.md, paddingHorizontal: spacing.lg },
+  menuItemLabel: { fontFamily: fonts.bodyMedium, fontSize: fontSizes.md, color: colors.text },
+  menuItemDanger: { color: colors.statusCancelled.color },
 });

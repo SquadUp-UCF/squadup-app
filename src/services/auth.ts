@@ -1,15 +1,12 @@
 // Fake placeholder Ai to simulate backend
 // will later be replaced with real backend/api
+import { makeTempUsername } from '@/utils/validation';
+import { DEMO_USER_ID, MOCK_USERS } from './users';
+import type { UserProfile } from '@/types/user';
 
 export type AuthResponse = {
   token: string;
-  user: {
-    id: string;
-    first_name: string;
-    last_name: string;
-    email: string;
-    username: string;
-  };
+  user: UserProfile;
 };
 
 function delay(ms: number) {
@@ -23,14 +20,10 @@ export async function login(email: string, password: string): Promise<AuthRespon
     throw new Error('Invalid email or password'); // fake failure, easy to trigger while testing
   }
 
-  return {
-    token: 'fake-jwt-token',
-    user: { id: 'fake-id', first_name: 'Test', last_name: 'User', email, username: 'testuser' },
-  };
+  const user = { ...MOCK_USERS[DEMO_USER_ID], email };
+  MOCK_USERS[DEMO_USER_ID] = user;
+  return { token: 'fake-jwt-token', user };
 }
-
-// src/services/auth.ts — add below the existing login()
-import { makeTempUsername } from '@/utils/validation';
 
 export async function register(input: {
   firstName: string;
@@ -39,16 +32,17 @@ export async function register(input: {
   password: string;
 }): Promise<AuthResponse> {
   await delay(800);
-  return {
-    token: 'fake-jwt-token',
-    user: {
-      id: 'fake-id',
-      first_name: input.firstName,
-      last_name: input.lastName,
-      email: input.email,
-      username: makeTempUsername(input.firstName, input.lastName),
-    },
+  const user: UserProfile = {
+    id: DEMO_USER_ID,
+    first_name: input.firstName,
+    last_name: input.lastName,
+    email: input.email,
+    username: makeTempUsername(input.firstName, input.lastName),
+    profile_picture: null,
+    preferred_positions: {},
   };
+  MOCK_USERS[DEMO_USER_ID] = user;
+  return { token: 'fake-jwt-token', user };
 }
 
 export async function sendVerificationCode(email: string): Promise<void> {
@@ -64,4 +58,17 @@ export async function verifyCode(email: string, code: string): Promise<void> {
 
 export async function resendCode(email: string): Promise<void> {
   await delay(400);
+}
+
+// Always "succeeds" with a generic message, mirroring the web backend's
+// behavior of not revealing whether an email is registered.
+export async function forgotPassword(email: string): Promise<void> {
+  await delay(600);
+}
+
+export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  await delay(700);
+  if (currentPassword.length < 4) {
+    throw new Error('Current password is incorrect');
+  }
 }

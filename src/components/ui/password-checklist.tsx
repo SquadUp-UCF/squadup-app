@@ -1,7 +1,7 @@
 // password checker logic for strong password
 import { StyleSheet, Text, View } from 'react-native';
 import { passwordChecks } from '@/utils/validation';
-console.log("passwordChecks =", passwordChecks);
+import { colors, fonts, fontSizes, spacing } from '@/constants/theme';
 
 type PasswordChecklistProps = {
   password: string;
@@ -34,9 +34,9 @@ export function PasswordChecklist({ password, confirmPassword }: PasswordCheckli
 }
 
 const styles = StyleSheet.create({
-  container: { gap: 4, marginTop: -4, marginBottom: 4 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#ccc' },
-  dotMet: { backgroundColor: '#2F6B3C' },
-  rowText: { fontSize: 12, color: '#666' },
+  container: { gap: 4, marginTop: -2, marginBottom: 4 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#a90000' },
+  dotMet: { backgroundColor: '#22c55e' },
+  rowText: { fontFamily: fonts.body, fontSize: fontSizes.xs, color: colors.muted },
 });
