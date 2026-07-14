@@ -1,12 +1,19 @@
-// Pop up screen for creating game lsitings
-import { useState } from 'react';
-import { View, StyleSheet, Text, Pressable, ActivityIndicator, ScrollView, Platform } from 'react-native';
-import { router } from 'expo-router';
+// Pop up screen for creating/editing game listings
+import { useEffect, useState } from 'react';
+import { Image, Pressable, ScrollView, StyleSheet, Text, View, Platform } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { router, useLocalSearchParams } from 'expo-router';
 import { TextField } from '@/components/ui/text-field';
 import { SportPicker } from '@/components/ui/sport-picker';
-import { createGame } from '@/services/games';
+import { SportIcon, availableSports } from '@/components/ui/sport-icon';
+import { PrimaryButton } from '@/components/ui/primary-button';
+import { createGame, getGame, updateGame } from '@/services/games';
 import { isFutureDate } from '@/utils/validation';
+import { hasCustomBanner } from '@/utils/games';
+import { useSession } from '@/contexts/session-context';
+import { colors, fonts, fontSizes, radii, spacing } from '@/constants/theme';
 
 function defaultStartTime(): Date {
   const date = new Date();
@@ -15,7 +22,14 @@ function defaultStartTime(): Date {
 }
 
 export default function PostGameScreen() {
+  const { gameId } = useLocalSearchParams<{ gameId?: string }>();
+  const isEdit = Boolean(gameId);
+  const { user } = useSession();
+
+  const [loadingExisting, setLoadingExisting] = useState(isEdit);
   const [sport, setSport] = useState('');
+  const [customSport, setCustomSport] = useState('');
+  const [showOther, setShowOther] = useState(false);
   const [location, setLocation] = useState('');
   const [description, setDescription] = useState('');
   const [startDate, setStartDate] = useState<Date>(defaultStartTime);
@@ -23,8 +37,27 @@ export default function PostGameScreen() {
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [minPlayers, setMinPlayers] = useState('2');
   const [maxPlayers, setMaxPlayers] = useState('10');
+  const [bannerUri, setBannerUri] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!gameId) return;
+    getGame(gameId).then((game) => {
+      if (!game) return;
+      const knownSport = availableSports.includes(game.sport.toLowerCase());
+      setSport(knownSport ? game.sport.toLowerCase() : 'other');
+      setShowOther(!knownSport);
+      if (!knownSport) setCustomSport(game.sport);
+      setLocation(game.location);
+      setDescription(game.description || '');
+      setStartDate(new Date(game.start_time));
+      setMinPlayers(String(game.min_players));
+      setMaxPlayers(String(game.max_players));
+      if (hasCustomBanner(game)) setBannerUri(game.photo_url);
+      setLoadingExisting(false);
+    });
+  }, [gameId]);
 
   function onValueChangeDate(_event: unknown, selected?: Date) {
     setShowDatePicker(false);
@@ -42,10 +75,34 @@ export default function PostGameScreen() {
     setStartDate(updated);
   }
 
+  async function handlePickBanner() {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      setError('Photo library access is needed to add a banner image.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [16, 9],
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets[0]) {
+      setBannerUri(result.assets[0].uri);
+    }
+  }
+
+  function selectSport(value: string) {
+    setSport(value);
+    setShowOther(false);
+  }
+
+  const effectiveSport = showOther ? customSport : sport;
+
   async function handleSubmit() {
     setError('');
 
-    if (!sport) {
+    if (!effectiveSport) {
       setError('Pick a sport');
       return;
     }
@@ -53,7 +110,7 @@ export default function PostGameScreen() {
       setError('Location is required');
       return;
     }
-    if (!isFutureDate(startDate)) {
+    if (!isEdit && !isFutureDate(startDate)) {
       setError('Start time must be in the future');
       return;
     }
@@ -67,14 +124,20 @@ export default function PostGameScreen() {
 
     setIsSubmitting(true);
     try {
-      await createGame({
-        sport,
+      const input = {
+        sport: effectiveSport,
         location,
         description: description.trim() || undefined,
         start_time: startDate.toISOString(),
         min_players: min,
         max_players: max,
-      });
+        photo_url: bannerUri || undefined,
+      };
+      if (isEdit && gameId) {
+        await updateGame(gameId, input);
+      } else {
+        await createGame(input, user?.id ?? '');
+      }
       router.back();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
@@ -83,10 +146,36 @@ export default function PostGameScreen() {
     }
   }
 
+  if (loadingExisting) return null;
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
+      <Pressable style={styles.banner} onPress={handlePickBanner}>
+        {bannerUri ? (
+          <Image source={{ uri: bannerUri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+        ) : (
+          <LinearGradient colors={['#2F8F4E', '#1F6B3E']} style={StyleSheet.absoluteFill} />
+        )}
+        {!bannerUri && <SportIcon sport={effectiveSport} size={48} color="rgba(255,255,255,0.55)" />}
+        <View style={styles.bannerPrompt}>
+          <Text style={styles.bannerPromptText}>{bannerUri ? 'Change image' : 'Upload an image'}</Text>
+        </View>
+      </Pressable>
+
       <Text style={styles.label}>Sport</Text>
-      <SportPicker value={sport} onChange={setSport} />
+      <SportPicker value={sport} onChange={selectSport} />
+      <Pressable
+        style={[styles.otherChip, showOther && styles.otherChipSelected]}
+        onPress={() => {
+          setShowOther(true);
+          setSport('other');
+        }}
+      >
+        <Text style={[styles.otherChipText, showOther && styles.otherChipTextSelected]}>Other</Text>
+      </Pressable>
+      {showOther && (
+        <TextField label="Custom sport" value={customSport} onChangeText={setCustomSport} placeholder="Enter a sport" />
+      )}
 
       <TextField label="Location" value={location} onChangeText={setLocation} placeholder="e.g. RWC Courts, UCF" />
 
@@ -144,27 +233,54 @@ export default function PostGameScreen() {
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      <Pressable style={styles.button} onPress={handleSubmit} disabled={isSubmitting}>
-        {isSubmitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Post a game</Text>}
-      </Pressable>
+      <PrimaryButton label={isEdit ? 'Save changes' : 'Post a game'} loading={isSubmitting} onPress={handleSubmit} />
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flexGrow: 1, padding: 20, gap: 12 },
-  label: { fontSize: 13, fontWeight: '600', color: '#333' },
-  row: { flexDirection: 'row', gap: 12 },
+  container: { flexGrow: 1, padding: spacing.xl, gap: spacing.md },
+  banner: {
+    height: 140,
+    borderRadius: radii.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    marginBottom: spacing.sm,
+  },
+  bannerPrompt: { position: 'absolute', bottom: spacing.sm, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.4)', paddingHorizontal: spacing.md, paddingVertical: 4, borderRadius: radii.pill },
+  bannerPromptText: { color: colors.white, fontFamily: fonts.bodyMedium, fontSize: fontSizes.xs },
+  label: { fontFamily: fonts.headingBold, fontSize: fontSizes.xs, textTransform: 'uppercase', letterSpacing: 0.6, color: colors.muted },
+  otherChip: {
+    alignSelf: 'flex-start',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.pill,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    marginTop: -spacing.xs,
+  },
+  otherChipSelected: { backgroundColor: colors.green, borderColor: colors.green },
+  otherChipText: { fontFamily: fonts.bodyMedium, fontSize: fontSizes.sm, color: colors.text },
+  otherChipTextSelected: { color: colors.white, fontFamily: fonts.bodyBold },
+  row: { flexDirection: 'row', gap: spacing.md },
   half: { flex: 1 },
   dateButton: {
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
   },
-  dateButtonText: { fontSize: 16 },
-  error: { color: 'crimson' },
-  button: { backgroundColor: '#2F6B3C', paddingVertical: 14, borderRadius: 8, alignItems: 'center', marginTop: 8 },
-  buttonText: { color: '#fff', fontWeight: '600', fontSize: 16 },
+  dateButtonText: { fontFamily: fonts.body, fontSize: fontSizes.lg, color: colors.text },
+  error: {
+    fontFamily: fonts.body,
+    fontSize: fontSizes.md,
+    color: colors.danger,
+    backgroundColor: colors.dangerBg,
+    padding: spacing.md,
+    borderRadius: radii.sm,
+  },
 });

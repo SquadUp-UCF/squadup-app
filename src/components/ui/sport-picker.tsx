@@ -1,6 +1,8 @@
-// allows user to select perfered sport on profile-setup
+// Icon-based sport picker — mirrors the SportIcon-driven chip/select UI used
+// throughout squadup-front (ProfileSetup, PostGameModal, ProfileModal).
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { SPORTS } from '@/constants/sports';
+import { colors, fonts, fontSizes, radii, spacing } from '@/constants/theme';
+import { SportIcon, availableSports, sportLabel } from './sport-icon';
 
 type SportPickerProps = {
   value: string;
@@ -9,8 +11,8 @@ type SportPickerProps = {
 
 export function SportPicker({ value, onChange }: SportPickerProps) {
   return (
-    <View style={styles.container}>
-      {SPORTS.map((sport) => {
+    <View style={styles.grid}>
+      {availableSports.map((sport) => {
         const isSelected = sport === value;
         return (
           <Pressable
@@ -18,7 +20,8 @@ export function SportPicker({ value, onChange }: SportPickerProps) {
             onPress={() => onChange(sport)}
             style={[styles.chip, isSelected && styles.chipSelected]}
           >
-            <Text style={[styles.chipText, isSelected && styles.chipTextSelected]}>{sport}</Text>
+            <SportIcon sport={sport} size={16} color={isSelected ? colors.white : colors.green} />
+            <Text style={[styles.chipText, isSelected && styles.chipTextSelected]}>{sportLabel(sport)}</Text>
           </Pressable>
         );
       })}
@@ -27,15 +30,19 @@ export function SportPicker({ value, onChange }: SportPickerProps) {
 }
 
 const styles = StyleSheet.create({
-  container: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   chip: {
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#ccc',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.pill,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
   },
-  chipSelected: { backgroundColor: '#2F6B3C', borderColor: '#2F6B3C' },
-  chipText: { fontSize: 14, color: '#333' },
-  chipTextSelected: { color: '#fff', fontWeight: '600' },
+  chipSelected: { backgroundColor: colors.green, borderColor: colors.green },
+  chipText: { fontFamily: fonts.bodyMedium, fontSize: fontSizes.sm, color: colors.text },
+  chipTextSelected: { color: colors.white, fontFamily: fonts.bodyBold },
 });

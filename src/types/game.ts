@@ -3,6 +3,7 @@ export type Participant = {
   user: string; // user id
   status: 'joined' | 'cancelled';
   joined_at: string;
+  party_size?: number; // one account can RSVP for a group; defaults to 1
 };
 
 export type Game = {
@@ -17,4 +18,5 @@ export type Game = {
   status: 'open' | 'confirmed' | 'locked' | 'completed' | 'cancelled';
   participants: Participant[];
   photo_url: string;
+  createdAt?: string; // drives the "NEW" badge
 };

@@ -1,68 +1,218 @@
-// game cards
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+// game cards — mirrors squadup-front's PostsList.jsx GameCard: banner, status
+// badges, join-progress bar, and join/leave or host edit/delete actions.
+import { useState } from 'react';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Feather } from '@expo/vector-icons';
 import type { Game } from '@/types/game';
-import { formatGameDateTime, activePlayerCount } from '@/utils/format';
+import { formatGameDateTime } from '@/utils/format';
+import { activeCount, hasCustomBanner, isLive, isNew, statusMeta } from '@/utils/games';
+import { SportIcon, sportLabel } from '@/components/ui/sport-icon';
+import { Badge } from '@/components/ui/badge';
+import { colors, fonts, fontSizes, radii, spacing } from '@/constants/theme';
 
 type GameCardProps = {
   game: Game;
+  currentUserId?: string;
   onPress?: () => void;
+  onJoin?: (game: Game) => void;
+  joiningId?: string | null;
+  onLeave?: (game: Game) => void;
+  leavingId?: string | null;
+  onEdit?: (game: Game) => void;
+  onDelete?: (game: Game) => void;
+  deletingId?: string | null;
 };
 
-export function GameCard({ game, onPress }: GameCardProps) {
-  const playerCount = activePlayerCount(game);
+export function GameCard({
+  game,
+  currentUserId,
+  onPress,
+  onJoin,
+  joiningId,
+  onLeave,
+  leavingId,
+  onEdit,
+  onDelete,
+  deletingId,
+}: GameCardProps) {
+  const [liked, setLiked] = useState(false);
+  const meta = statusMeta(game);
+  const joined = activeCount(game);
+  const live = isLive(game);
+  const ratio = game.max_players > 0 ? Math.min(1, joined / game.max_players) : 0;
+  const fillingUp = ratio >= 0.8 && game.status !== 'locked' && game.status !== 'completed';
+  const barColor = ratio >= 0.8 ? colors.fillingUp : '#2F8F4E';
+
+  const isHost = Boolean(currentUserId) && game.host === currentUserId;
+  const alreadyIn = game.participants.some((p) => p.user === currentUserId && p.status === 'joined');
+  const joinable =
+    !isHost && !alreadyIn && game.status !== 'locked' && game.status !== 'completed' && game.status !== 'cancelled';
+
+  const customBanner = hasCustomBanner(game);
 
   return (
     <Pressable style={styles.card} onPress={onPress}>
-      {/* Placeholder for the banner image — photo_url is a relative path meant
-          to be combined with the API's base URL later */}
-      <View style={styles.bannerPlaceholder}>
-        <Text style={styles.bannerText}>{game.sport}</Text>
-      </View>
+      <View style={styles.banner}>
+        {customBanner ? (
+          <Image source={{ uri: game.photo_url }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+        ) : (
+          <LinearGradient colors={['#2F8F4E', '#1F6B3E']} style={StyleSheet.absoluteFill} />
+        )}
+        {!customBanner && (
+          <View style={styles.bannerIcon}>
+            <SportIcon sport={game.sport} size={64} color="rgba(255,255,255,0.55)" />
+          </View>
+        )}
 
-      <View style={styles.info}>
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>{game.sport}</Text>
+        <View style={styles.badgesLeft}>
+          {live ? (
+            <Badge label="LIVE" bg={colors.live.bg} color={colors.live.color} />
+          ) : (
+            isNew(game) && <Badge label="✨ NEW" bg={colors.new.bg} color={colors.new.color} />
+          )}
+          {fillingUp && <Badge label="Filling up" bg={colors.fillingUp} color={colors.white} />}
         </View>
 
-        <Text style={styles.location}>{game.location}</Text>
+        <View style={styles.badgesRight}>
+          {isHost ? (
+            <>
+              <IconButton onPress={() => onEdit?.(game)}>
+                <Feather name="edit-2" size={16} color={colors.statusOpen.color} />
+              </IconButton>
+              <IconButton onPress={() => onDelete?.(game)} disabled={deletingId === game.id}>
+                <Feather name="trash-2" size={16} color={colors.statusCancelled.color} />
+              </IconButton>
+            </>
+          ) : (
+            <IconButton onPress={() => setLiked((v) => !v)}>
+              <Feather name="heart" size={16} color={liked ? colors.fillingUp : '#666'} />
+            </IconButton>
+          )}
+        </View>
+      </View>
 
-        <View style={styles.row}>
-          <Text style={styles.meta}>{formatGameDateTime(game.start_time)}</Text>
-          <Text style={styles.meta}>
-            {playerCount} / {game.max_players} Players
+      <View style={styles.body}>
+        <View style={[styles.sportPill, { backgroundColor: meta.bg }]}>
+          <SportIcon sport={game.sport} size={14} color={meta.color} />
+          <Text style={[styles.sportPillLabel, { color: meta.color }]}>{sportLabel(game.sport)}</Text>
+        </View>
+
+        <View style={styles.titleRow}>
+          <Feather name="map-pin" size={16} color="#2F8F4E" />
+          <Text style={styles.title} numberOfLines={1}>
+            {game.location}
           </Text>
         </View>
+
+        <View style={styles.metaRow}>
+          <View style={styles.metaItem}>
+            <Feather name="clock" size={13} color={colors.muted} />
+            <Text style={styles.metaText}>{formatGameDateTime(game.start_time)}</Text>
+          </View>
+          <View style={styles.metaItem}>
+            <Feather name="users" size={13} color={colors.muted} />
+            <Text style={styles.metaText}>
+              {joined} / {game.max_players}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.barTrack}>
+          <View style={[styles.barFill, { width: `${ratio * 100}%`, backgroundColor: barColor }]} />
+        </View>
+
+        {!isHost && alreadyIn && (
+          <Pressable
+            style={[styles.actionBtn, styles.leaveBtn]}
+            onPress={() => onLeave?.(game)}
+            disabled={leavingId === game.id}
+          >
+            <Text style={styles.leaveLabel}>{leavingId === game.id ? 'Leaving…' : "You're in — Leave"}</Text>
+          </Pressable>
+        )}
+        {!isHost && !alreadyIn && (
+          <Pressable
+            style={[styles.actionBtn, joinable ? styles.joinBtn : styles.joinBtnDisabled]}
+            onPress={() => onJoin?.(game)}
+            disabled={!joinable || joiningId === game.id}
+          >
+            <Text style={joinable ? styles.joinLabel : styles.joinLabelDisabled}>
+              {game.status === 'locked' ? 'Full' : joiningId === game.id ? 'Joining…' : 'Join game'}
+            </Text>
+          </Pressable>
+        )}
       </View>
+    </Pressable>
+  );
+}
+
+function IconButton({
+  onPress,
+  disabled,
+  children,
+}: {
+  onPress: () => void;
+  disabled?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <Pressable style={[styles.iconBtn, disabled && styles.iconBtnDisabled]} onPress={onPress} disabled={disabled}>
+      {children}
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 12,
-    backgroundColor: '#fff',
-    marginBottom: 16,
+    borderRadius: radii.lg,
+    backgroundColor: colors.white,
+    marginBottom: spacing.lg,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: '#eee',
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
   },
-  bannerPlaceholder: {
-    height: 140,
-    backgroundColor: '#2F6B3C',
+  banner: { height: 140, alignItems: 'center', justifyContent: 'center' },
+  bannerIcon: { alignItems: 'center', justifyContent: 'center' },
+  badgesLeft: { position: 'absolute', top: spacing.sm, left: spacing.sm, gap: 6 },
+  badgesRight: { position: 'absolute', top: spacing.sm, right: spacing.sm, flexDirection: 'row', gap: 6 },
+  iconBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: 'rgba(255,255,255,0.9)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  bannerText: { color: '#fff', fontSize: 18, fontWeight: '700' },
-  info: { padding: 12, gap: 6 },
-  badge: {
+  iconBtnDisabled: { opacity: 0.5 },
+  body: { padding: spacing.md, gap: 6 },
+  sportPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
     alignSelf: 'flex-start',
-    backgroundColor: '#eee',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    borderRadius: radii.pill,
   },
-  badgeText: { fontSize: 12, fontWeight: '600', color: '#333' },
-  location: { fontSize: 16, fontWeight: '700' },
-  row: { flexDirection: 'row', justifyContent: 'space-between' },
-  meta: { fontSize: 13, color: '#666' },
+  sportPillLabel: { fontFamily: fonts.bodyBold, fontSize: fontSizes.xs, textTransform: 'capitalize' },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  title: { fontFamily: fonts.headingBold, fontSize: fontSizes.lg, color: colors.text, flexShrink: 1 },
+  metaRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 2 },
+  metaItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  metaText: { fontFamily: fonts.body, fontSize: fontSizes.sm, color: colors.muted },
+  barTrack: { height: 5, borderRadius: 3, backgroundColor: '#eee', overflow: 'hidden', marginTop: 4 },
+  barFill: { height: '100%', borderRadius: 3 },
+  actionBtn: { marginTop: spacing.sm, borderRadius: radii.md, paddingVertical: 11, alignItems: 'center' },
+  joinBtn: { backgroundColor: colors.green },
+  joinBtnDisabled: { backgroundColor: '#E4E4E4' },
+  joinLabel: { fontFamily: fonts.bodyBold, fontSize: fontSizes.md, color: colors.white },
+  joinLabelDisabled: { fontFamily: fonts.bodyBold, fontSize: fontSizes.md, color: '#999' },
+  leaveBtn: { backgroundColor: colors.surface, borderWidth: 1.5, borderColor: colors.border },
+  leaveLabel: { fontFamily: fonts.bodyBold, fontSize: fontSizes.md, color: colors.green },
 });

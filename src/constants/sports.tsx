@@ -1,11 +1,4 @@
-// Sports choices list - will be expanded
-export const SPORTS = [
-  'Soccer',
-  'Basketball',
-  'Volleyball',
-  'Tennis',
-  'Pickleball',
-  'Ultimate Frisbee',
-  'Flag Football',
-  'Baseball',
-] as const;
+// Sport slugs — mirrors squadup-front's SportIcons.jsx registry so mobile and
+// web offer the same sport list. See src/components/ui/sport-icon.tsx for the
+// icon mapping and label formatting.
+export { availableSports as SPORTS, sportLabel } from '@/components/ui/sport-icon';

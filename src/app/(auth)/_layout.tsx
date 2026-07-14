@@ -10,6 +10,7 @@ export default function AuthLayout() {
         <Stack.Screen name="register" options={{ title: 'Register' }} />
         <Stack.Screen name="verify" options={{ title: 'Verify Email' }} />
         <Stack.Screen name="profile-setup" options={{ title: 'Set Up Profile' }} />
+        <Stack.Screen name="forgot-password" options={{ title: 'Reset Password' }} />
       </Stack>
     </AuthFlowProvider>
   );

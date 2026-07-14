@@ -1,11 +1,13 @@
-// verify screen 
+// verify screen
 // for now, fake code is sent (123456) handled in auth.ts
 import { useEffect, useState } from 'react';
-import { View, StyleSheet, Pressable, Text, ActivityIndicator } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
-import { TextField } from '@/components/ui/text-field';
+import { OtpInput } from '@/components/ui/otp-input';
+import { PrimaryButton } from '@/components/ui/primary-button';
 import { verifyCode, resendCode } from '@/services/auth';
 import { useAuthFlow } from '@/contexts/auth-flow-context';
+import { colors, fonts, fontSizes, spacing } from '@/constants/theme';
 
 const RESEND_COOLDOWN_SECONDS = 60;
 
@@ -47,34 +49,32 @@ export default function VerifyScreen() {
     try {
       await resendCode(email);
       setSecondsLeft(RESEND_COOLDOWN_SECONDS);
-    } catch (err) {
+    } catch {
       setError('Could not resend code');
     }
   }
 
   return (
     <View style={styles.container}>
-      <Text style={styles.heading}>Verify your email</Text>
-      <Text style={styles.subtext}>We sent a one-time code to {email}. Enter it below.</Text>
+      <View style={styles.head}>
+        <Text style={styles.heading}>Verify your email</Text>
+        <Text style={styles.subtext}>
+          We sent a one-time code to <Text style={styles.subtextStrong}>{email}</Text>. Enter it below.
+        </Text>
+      </View>
 
-      <TextField
-        label="Verification code"
-        value={code}
-        onChangeText={setCode}
-        keyboardType="number-pad"
-        maxLength={6}
-        autoCorrect={false}
-      />
+      <OtpInput value={code} onChange={setCode} />
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      <Pressable style={styles.button} onPress={handleSubmit} disabled={isSubmitting}>
-        {isSubmitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Verify</Text>}
-      </Pressable>
+      <PrimaryButton label="Verify" loading={isSubmitting} disabled={code.length < 6} onPress={handleSubmit} />
 
       <Pressable onPress={handleResend} disabled={secondsLeft > 0}>
-        <Text style={[styles.link, secondsLeft > 0 && styles.linkDisabled]}>
-          {secondsLeft > 0 ? `Resend code (${secondsLeft}s)` : 'Resend code'}
+        <Text style={styles.link}>
+          {"Didn't get a code? "}
+          <Text style={[styles.linkStrong, secondsLeft > 0 && styles.linkDisabled]}>
+            {secondsLeft > 0 ? `Resend in ${secondsLeft}s` : 'Resend code'}
+          </Text>
         </Text>
       </Pressable>
     </View>
@@ -82,12 +82,20 @@ export default function VerifyScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 24, justifyContent: 'center', gap: 16 },
-  heading: { fontSize: 28, fontWeight: '700' },
-  subtext: { fontSize: 14, color: '#666' },
-  error: { color: 'crimson' },
-  button: { backgroundColor: '#2F6B3C', paddingVertical: 14, borderRadius: 8, alignItems: 'center' },
-  buttonText: { color: '#fff', fontWeight: '600', fontSize: 16 },
-  link: { textAlign: 'center', color: '#2F6B3C' },
-  linkDisabled: { color: '#999' },
+  container: { flex: 1, padding: spacing.xl, justifyContent: 'center', gap: spacing.lg },
+  head: { gap: 4 },
+  heading: { fontFamily: fonts.heading, fontSize: fontSizes.display, color: colors.text },
+  subtext: { fontFamily: fonts.body, fontSize: fontSizes.lg, color: colors.muted },
+  subtextStrong: { fontFamily: fonts.bodyBold, color: colors.text },
+  error: {
+    fontFamily: fonts.body,
+    fontSize: fontSizes.md,
+    color: colors.danger,
+    backgroundColor: colors.dangerBg,
+    padding: spacing.md,
+    borderRadius: 10,
+  },
+  link: { textAlign: 'center', fontFamily: fonts.body, fontSize: fontSizes.md, color: colors.muted },
+  linkStrong: { fontFamily: fonts.bodyBold, color: colors.green },
+  linkDisabled: { color: colors.muted },
 });
