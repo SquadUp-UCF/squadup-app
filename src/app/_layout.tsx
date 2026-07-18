@@ -38,6 +38,7 @@ export default function RootLayout() {
         <Stack.Screen name="profile" options={{ presentation: 'modal', headerShown: false }} />
         <Stack.Screen name="change-password" options={{ title: 'Update Password' }} />
         <Stack.Screen name="game/[id]" options={{ headerShown: false }} />
+        <Stack.Screen name="user/[id]" options={{ title: 'Profile' }} />
         </Stack>
       </SavedGamesProvider>
     </SessionProvider>

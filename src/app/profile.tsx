@@ -8,11 +8,13 @@ import { TextField } from '@/components/ui/text-field';
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { SportIcon, availableSports, sportLabel } from '@/components/ui/sport-icon';
 import { SkillPickerModal } from '@/components/games/skill-picker-modal';
-import { updateProfile, uploadAvatar, getSavedGames } from '@/services/users';
+import { Feather } from '@expo/vector-icons';
+import { updateProfile, uploadAvatar, getSavedGames, getPlayerProfile } from '@/services/users';
 import { getMyGames } from '@/services/games';
 import { useSession } from '@/contexts/session-context';
 import { colors, fonts, fontSizes, radii, spacing } from '@/constants/theme';
 import type { Game } from '@/types/game';
+import type { PlayerProfile } from '@/types/user';
 
 type Tab = 'settings' | 'games';
 
@@ -36,6 +38,18 @@ export default function ProfileScreen() {
   // below never needs a synchronous setState call at the top of its body.
   const [gamesLoaded, setGamesLoaded] = useState(false);
   const gamesLoading = activeTab === 'games' && !gamesLoaded;
+
+  const [stats, setStats] = useState<PlayerProfile | null>(null);
+  useEffect(() => {
+    if (!user) return;
+    let active = true;
+    getPlayerProfile(user.id).then((p) => {
+      if (active) setStats(p);
+    });
+    return () => {
+      active = false;
+    };
+  }, [user]);
 
   useEffect(() => {
     if (activeTab !== 'games' || !user) return;
@@ -177,6 +191,26 @@ export default function ProfileScreen() {
             </View>
           </View>
 
+          {stats && (
+            <View style={styles.statsRow}>
+              <View style={styles.stat}>
+                <Text style={styles.statValue}>{stats.games_joined}</Text>
+                <Text style={styles.statLabel}>Played</Text>
+              </View>
+              <View style={styles.stat}>
+                <Text style={styles.statValue}>{stats.games_created}</Text>
+                <Text style={styles.statLabel}>Hosted</Text>
+              </View>
+              <View style={styles.stat}>
+                <View style={styles.statValueRow}>
+                  <Feather name="star" size={14} color={colors.green} />
+                  <Text style={styles.statValue}>{stats.reputation.toFixed(1)}</Text>
+                </View>
+                <Text style={styles.statLabel}>Reputation</Text>
+              </View>
+            </View>
+          )}
+
           <View style={styles.nameRow}>
             <View style={styles.nameField}>
               <TextField label="First name" value={firstName} onChangeText={setFirstName} />
@@ -285,6 +319,17 @@ const styles = StyleSheet.create({
   tabLabel: { fontFamily: fonts.bodyMedium, fontSize: fontSizes.md, color: colors.muted },
   tabLabelActive: { color: colors.green, fontFamily: fonts.bodyBold },
   body: { gap: spacing.lg },
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    paddingVertical: spacing.md,
+  },
+  stat: { alignItems: 'center', gap: 2 },
+  statValueRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  statValue: { fontFamily: fonts.heading, fontSize: fontSizes.xl, color: colors.text },
+  statLabel: { fontFamily: fonts.body, fontSize: fontSizes.xs, color: colors.muted },
   avatarRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   avatar: {
     width: 64,

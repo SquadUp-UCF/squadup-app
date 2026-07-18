@@ -6,7 +6,7 @@
 import { apiFetch } from '@/lib/http';
 import { mediaUrl } from '@/lib/api-config';
 import { getGame } from './games';
-import type { UserProfile } from '@/types/user';
+import type { UserProfile, PlayerProfile } from '@/types/user';
 import type { Game } from '@/types/game';
 
 // Map a serialized API user (/users/me carries `_id`; /users/:id carries `id`)
@@ -34,6 +34,27 @@ export async function getUser(id: string): Promise<UserProfile | null> {
   try {
     const raw = await apiFetch<Record<string, any>>(`/users/${id}`);
     return toUserProfile(raw);
+  } catch {
+    return null;
+  }
+}
+
+// A player's public profile with stats (reputation + game counts) for the
+// profile screen. `games_created`/`games_joined` come back as counts here.
+export async function getPlayerProfile(id: string): Promise<PlayerProfile | null> {
+  try {
+    const raw = await apiFetch<Record<string, any>>(`/users/${id}`);
+    return {
+      id: String(raw._id ?? raw.id ?? id),
+      first_name: raw.first_name ?? '',
+      last_name: raw.last_name ?? '',
+      username: raw.username ?? '',
+      profile_picture: mediaUrl(raw.profile_picture),
+      reputation: typeof raw.reputation === 'number' ? raw.reputation : 5,
+      games_created: typeof raw.games_created === 'number' ? raw.games_created : 0,
+      games_joined: typeof raw.games_joined === 'number' ? raw.games_joined : 0,
+      preferred_positions: raw.skill_levels ?? raw.preferred_positions ?? {},
+    };
   } catch {
     return null;
   }
