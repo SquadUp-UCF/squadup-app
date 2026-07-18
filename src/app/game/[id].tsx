@@ -64,8 +64,15 @@ export default function GameDetailScreen() {
   const [leaving, setLeaving] = useState(false);
   const [guestName, setGuestName] = useState('');
   const [guestPosition, setGuestPosition] = useState('');
+  const [myPosDraft, setMyPosDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState('');
+
+  // Keep the free-text "your position" field in sync with the roster.
+  useEffect(() => {
+    const mine = game?.participants.find((p) => p.user === user?.id && p.status === 'joined');
+    setMyPosDraft(mine?.position ?? '');
+  }, [game, user?.id]);
 
   useEffect(() => {
     if (!id) return;
@@ -287,18 +294,38 @@ export default function GameDetailScreen() {
         </View>
 
         {/* Set your own position (host or any joined player). */}
-        {myEntry && sportPositions.length > 0 && (
+        {myEntry && (
           <View style={styles.section}>
             <Text style={styles.sectionLabel}>Your position</Text>
-            <View style={styles.chipRow}>
-              {sportPositions.map((pos) => (
-                <Chip
-                  key={pos}
-                  label={pos}
-                  selected={myEntry.position === pos}
-                  onPress={() => handleSetMyPosition(myEntry.position === pos ? '' : pos)}
-                />
-              ))}
+            {sportPositions.length > 0 && (
+              <View style={styles.chipRow}>
+                {sportPositions.map((pos) => (
+                  <Chip
+                    key={pos}
+                    label={pos}
+                    selected={myEntry.position === pos}
+                    onPress={() => handleSetMyPosition(myEntry.position === pos ? '' : pos)}
+                  />
+                ))}
+              </View>
+            )}
+            <View style={styles.inlineRow}>
+              <TextInput
+                style={[styles.guestInput, styles.inlineInput]}
+                value={myPosDraft}
+                onChangeText={setMyPosDraft}
+                placeholder="e.g. Midfielder"
+                placeholderTextColor={colors.muted}
+                autoCapitalize="words"
+                editable={!busy}
+              />
+              <Pressable
+                style={[styles.addGuestBtn, busy && styles.addGuestBtnDisabled]}
+                onPress={() => handleSetMyPosition(myPosDraft.trim())}
+                disabled={busy}
+              >
+                <Text style={styles.addGuestBtnText}>Save</Text>
+              </Pressable>
             </View>
           </View>
         )}
@@ -328,6 +355,15 @@ export default function GameDetailScreen() {
                 ))}
               </View>
             )}
+            <TextInput
+              style={styles.guestInput}
+              value={guestPosition}
+              onChangeText={setGuestPosition}
+              placeholder="Their position (optional)"
+              placeholderTextColor={colors.muted}
+              autoCapitalize="words"
+              editable={!busy && !rosterFull}
+            />
             <Pressable
               style={[styles.addGuestBtn, (busy || rosterFull) && styles.addGuestBtnDisabled]}
               onPress={handleAddGuest}
@@ -462,6 +498,8 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.lg,
     color: colors.text,
   },
+  inlineRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'center' },
+  inlineInput: { flex: 1 },
   addGuestBtn: {
     alignSelf: 'flex-start',
     backgroundColor: colors.surface,

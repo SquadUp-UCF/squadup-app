@@ -299,19 +299,29 @@ export default function PostGameScreen() {
         ))}
       </View>
 
-      {!isEdit && sportPositions.length > 0 && (
+      {!isEdit && (
         <>
           <Text style={styles.label}>Your position (optional)</Text>
-          <View style={styles.chipRow}>
-            {sportPositions.map((p) => (
-              <Chip
-                key={p}
-                label={p}
-                selected={hostPosition === p}
-                onPress={() => setHostPosition(hostPosition === p ? '' : p)}
-              />
-            ))}
-          </View>
+          {sportPositions.length > 0 && (
+            <View style={styles.chipRow}>
+              {sportPositions.map((p) => (
+                <Chip
+                  key={p}
+                  label={p}
+                  selected={hostPosition === p}
+                  onPress={() => setHostPosition(hostPosition === p ? '' : p)}
+                />
+              ))}
+            </View>
+          )}
+          <TextInput
+            style={styles.playerInput}
+            value={hostPosition}
+            onChangeText={setHostPosition}
+            placeholder="e.g. Midfielder"
+            placeholderTextColor={colors.muted}
+            autoCapitalize="words"
+          />
         </>
       )}
 
@@ -341,6 +351,14 @@ export default function PostGameScreen() {
               ))}
             </View>
           )}
+          <TextInput
+            style={styles.playerInput}
+            value={playerPosition}
+            onChangeText={setPlayerPosition}
+            placeholder="Their position (optional)"
+            placeholderTextColor={colors.muted}
+            autoCapitalize="words"
+          />
           <Pressable style={styles.addPlayerBtn} onPress={addPlayer}>
             <Text style={styles.addPlayerBtnText}>Add player</Text>
           </Pressable>
