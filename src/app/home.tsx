@@ -156,9 +156,6 @@ export default function HomeScreen() {
         </View>
 
         <View style={styles.headerActions}>
-          <Pressable style={styles.postButton} onPress={() => router.push('/post-game')}>
-            <Text style={styles.postButtonText}>+ Post a game</Text>
-          </Pressable>
           <Pressable style={styles.avatar} onPress={() => setShowAccountMenu(true)}>
             <Text style={styles.avatarText}>{initial}</Text>
           </Pressable>
@@ -223,6 +220,12 @@ export default function HomeScreen() {
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.green} />}
           />
         )}
+      </View>
+
+      <View style={styles.createWrap} pointerEvents="box-none">
+        <Pressable style={styles.createButton} onPress={() => router.push('/post-game')}>
+          <Text style={styles.createButtonText}>Create Game</Text>
+        </Pressable>
       </View>
 
       <JoinPartySizeModal
@@ -311,7 +314,20 @@ const styles = StyleSheet.create({
   empty: { alignItems: 'center', marginTop: 60, gap: 4, paddingHorizontal: spacing.xl },
   emptyTitle: { fontFamily: fonts.headingBold, fontSize: fontSizes.lg, color: colors.text },
   emptySub: { fontFamily: fonts.body, fontSize: fontSizes.md, color: colors.muted, textAlign: 'center' },
-  list: { padding: spacing.lg, paddingTop: 0 },
+  list: { padding: spacing.lg, paddingTop: 0, paddingBottom: 96 },
+  createWrap: { position: 'absolute', left: 0, right: 0, bottom: 28, alignItems: 'center' },
+  createButton: {
+    backgroundColor: colors.green,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: 14,
+    borderRadius: radii.pill,
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
+  },
+  createButtonText: { color: colors.white, fontFamily: fonts.bodyBold, fontSize: fontSizes.lg },
   menuBackdrop: { flex: 1, backgroundColor: 'rgba(13,43,24,0.3)' },
   menu: {
     position: 'absolute',
