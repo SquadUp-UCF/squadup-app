@@ -27,6 +27,7 @@ import {
 import { getUser } from '@/services/users';
 import { SportIcon, sportLabel } from '@/components/ui/sport-icon';
 import { GameBanner } from '@/components/games/game-banner';
+import { Dropdown } from '@/components/ui/dropdown';
 import { JoinPartySizeModal } from '@/components/games/join-party-size-modal';
 import { useSession } from '@/contexts/session-context';
 import { useSavedGames } from '@/contexts/saved-games-context';
@@ -38,14 +39,6 @@ import type { Game } from '@/types/game';
 import type { UserProfile } from '@/types/user';
 
 const NOTIFICATIONS_KEY_PREFIX = 'squadup_notifications_';
-
-function Chip({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
-  return (
-    <Pressable style={[styles.chip, selected && styles.chipSelected]} onPress={onPress}>
-      <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{label}</Text>
-    </Pressable>
-  );
-}
 
 export default function GameDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -64,15 +57,8 @@ export default function GameDetailScreen() {
   const [leaving, setLeaving] = useState(false);
   const [guestName, setGuestName] = useState('');
   const [guestPosition, setGuestPosition] = useState('');
-  const [myPosDraft, setMyPosDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState('');
-
-  // Keep the free-text "your position" field in sync with the roster.
-  useEffect(() => {
-    const mine = game?.participants.find((p) => p.user === user?.id && p.status === 'joined');
-    setMyPosDraft(mine?.position ?? '');
-  }, [game, user?.id]);
 
   useEffect(() => {
     if (!id) return;
@@ -294,39 +280,16 @@ export default function GameDetailScreen() {
         </View>
 
         {/* Set your own position (host or any joined player). */}
-        {myEntry && (
+        {myEntry && sportPositions.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionLabel}>Your position</Text>
-            {sportPositions.length > 0 && (
-              <View style={styles.chipRow}>
-                {sportPositions.map((pos) => (
-                  <Chip
-                    key={pos}
-                    label={pos}
-                    selected={myEntry.position === pos}
-                    onPress={() => handleSetMyPosition(myEntry.position === pos ? '' : pos)}
-                  />
-                ))}
-              </View>
-            )}
-            <View style={styles.inlineRow}>
-              <TextInput
-                style={[styles.guestInput, styles.inlineInput]}
-                value={myPosDraft}
-                onChangeText={setMyPosDraft}
-                placeholder="e.g. Midfielder"
-                placeholderTextColor={colors.muted}
-                autoCapitalize="words"
-                editable={!busy}
-              />
-              <Pressable
-                style={[styles.addGuestBtn, busy && styles.addGuestBtnDisabled]}
-                onPress={() => handleSetMyPosition(myPosDraft.trim())}
-                disabled={busy}
-              >
-                <Text style={styles.addGuestBtnText}>Save</Text>
-              </Pressable>
-            </View>
+            <Dropdown
+              value={myEntry.position ?? ''}
+              options={sportPositions}
+              onChange={handleSetMyPosition}
+              placeholder="Select a position"
+              noneLabel="No position"
+            />
           </View>
         )}
 
@@ -344,26 +307,14 @@ export default function GameDetailScreen() {
               editable={!busy && !rosterFull}
             />
             {sportPositions.length > 0 && (
-              <View style={styles.chipRow}>
-                {sportPositions.map((pos) => (
-                  <Chip
-                    key={pos}
-                    label={pos}
-                    selected={guestPosition === pos}
-                    onPress={() => setGuestPosition(guestPosition === pos ? '' : pos)}
-                  />
-                ))}
-              </View>
+              <Dropdown
+                value={guestPosition}
+                options={sportPositions}
+                onChange={setGuestPosition}
+                placeholder="Their position (optional)"
+                noneLabel="No position"
+              />
             )}
-            <TextInput
-              style={styles.guestInput}
-              value={guestPosition}
-              onChangeText={setGuestPosition}
-              placeholder="Their position (optional)"
-              placeholderTextColor={colors.muted}
-              autoCapitalize="words"
-              editable={!busy && !rosterFull}
-            />
             <Pressable
               style={[styles.addGuestBtn, (busy || rosterFull) && styles.addGuestBtnDisabled]}
               onPress={handleAddGuest}

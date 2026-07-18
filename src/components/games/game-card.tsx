@@ -65,7 +65,7 @@ export function GameCard({
         </View>
 
         <View style={styles.badgesRight}>
-          {isHost ? (
+          {isHost && (
             <>
               <IconButton onPress={() => onEdit?.(game)}>
                 <Feather name="edit-2" size={16} color={colors.statusOpen.color} />
@@ -74,11 +74,10 @@ export function GameCard({
                 <Feather name="trash-2" size={16} color={colors.statusCancelled.color} />
               </IconButton>
             </>
-          ) : (
-            <IconButton onPress={() => toggleSaved(game.id)}>
-              <Feather name="heart" size={16} color={liked ? colors.fillingUp : '#666'} />
-            </IconButton>
           )}
+          <IconButton onPress={() => toggleSaved(game.id)}>
+            <Feather name="heart" size={16} color={liked ? colors.fillingUp : '#666'} />
+          </IconButton>
         </View>
       </View>
 

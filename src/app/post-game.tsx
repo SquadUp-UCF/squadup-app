@@ -2,19 +2,18 @@
 // skill level, the host's own position, and (on create) initial guest players.
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, Platform } from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { TextField } from '@/components/ui/text-field';
 import { SportPicker } from '@/components/ui/sport-picker';
 import { availableSports } from '@/components/ui/sport-icon';
 import { PrimaryButton } from '@/components/ui/primary-button';
+import { Dropdown } from '@/components/ui/dropdown';
 import { GameBanner } from '@/components/games/game-banner';
 import { LocationMapPicker, type Coordinate } from '@/components/ui/location-map-picker';
 import { createGame, getGame, updateGame } from '@/services/games';
 import { positionsForSport } from '@/constants/positions';
 import { isFutureDate } from '@/utils/validation';
-import { hasCustomBanner } from '@/utils/games';
 import { useSession } from '@/contexts/session-context';
 import { colors, fonts, fontSizes, radii, spacing } from '@/constants/theme';
 
@@ -64,7 +63,6 @@ export default function PostGameScreen() {
   const [players, setPlayers] = useState<{ name: string; position?: string }[]>([]);
   const [playerName, setPlayerName] = useState('');
   const [playerPosition, setPlayerPosition] = useState('');
-  const [bannerUri, setBannerUri] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -85,7 +83,6 @@ export default function PostGameScreen() {
       if (game.latitude != null && game.longitude != null) {
         setCoordinate({ latitude: game.latitude, longitude: game.longitude });
       }
-      if (hasCustomBanner(game)) setBannerUri(game.photo_url);
       setLoadingExisting(false);
     });
   }, [gameId]);
@@ -106,23 +103,6 @@ export default function PostGameScreen() {
     setStartDate(updated);
   }
 
-  async function handlePickBanner() {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      setError('Photo library access is needed to add a banner image.');
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [16, 9],
-      quality: 0.8,
-    });
-    if (!result.canceled && result.assets[0]) {
-      setBannerUri(result.assets[0].uri);
-    }
-  }
-
   function selectSport(value: string) {
     setSport(value);
     setShowOther(false);
@@ -133,8 +113,8 @@ export default function PostGameScreen() {
 
   const effectiveSport = showOther ? customSport : sport;
   const sportPositions = positionsForSport(showOther ? '' : sport);
-  // Show the picked image, else the sport's stock banner as a preview.
-  const bannerPhoto = bannerUri ?? (sport && !showOther ? `/sports/${sport}.jpg` : null);
+  // The sport's stock banner, shown as a non-editable preview.
+  const bannerPhoto = sport && !showOther ? `/sports/${sport}.jpg` : null;
 
   function addPlayer() {
     const name = playerName.trim();
@@ -187,7 +167,6 @@ export default function PostGameScreen() {
         latitude: coordinate.latitude,
         longitude: coordinate.longitude,
         skill_level: skillLevel,
-        photo_url: bannerUri || undefined,
       };
       if (isEdit && gameId) {
         await updateGame(gameId, input);
@@ -213,12 +192,9 @@ export default function PostGameScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Pressable style={styles.banner} onPress={handlePickBanner}>
+      <View style={styles.banner}>
         <GameBanner sport={effectiveSport} photoUrl={bannerPhoto} iconSize={48} style={StyleSheet.absoluteFill} />
-        <View style={styles.bannerPrompt}>
-          <Text style={styles.bannerPromptText}>{bannerUri ? 'Change image' : 'Upload an image'}</Text>
-        </View>
-      </Pressable>
+      </View>
 
       <Text style={styles.label}>Sport</Text>
       <SportPicker value={sport} onChange={selectSport} />
@@ -299,28 +275,15 @@ export default function PostGameScreen() {
         ))}
       </View>
 
-      {!isEdit && (
+      {!isEdit && sportPositions.length > 0 && (
         <>
           <Text style={styles.label}>Your position (optional)</Text>
-          {sportPositions.length > 0 && (
-            <View style={styles.chipRow}>
-              {sportPositions.map((p) => (
-                <Chip
-                  key={p}
-                  label={p}
-                  selected={hostPosition === p}
-                  onPress={() => setHostPosition(hostPosition === p ? '' : p)}
-                />
-              ))}
-            </View>
-          )}
-          <TextInput
-            style={styles.playerInput}
+          <Dropdown
             value={hostPosition}
-            onChangeText={setHostPosition}
-            placeholder="e.g. Midfielder"
-            placeholderTextColor={colors.muted}
-            autoCapitalize="words"
+            options={sportPositions}
+            onChange={setHostPosition}
+            placeholder="Select a position"
+            noneLabel="No position"
           />
         </>
       )}
@@ -340,25 +303,14 @@ export default function PostGameScreen() {
             onSubmitEditing={addPlayer}
           />
           {sportPositions.length > 0 && (
-            <View style={styles.chipRow}>
-              {sportPositions.map((p) => (
-                <Chip
-                  key={p}
-                  label={p}
-                  selected={playerPosition === p}
-                  onPress={() => setPlayerPosition(playerPosition === p ? '' : p)}
-                />
-              ))}
-            </View>
+            <Dropdown
+              value={playerPosition}
+              options={sportPositions}
+              onChange={setPlayerPosition}
+              placeholder="Their position (optional)"
+              noneLabel="No position"
+            />
           )}
-          <TextInput
-            style={styles.playerInput}
-            value={playerPosition}
-            onChangeText={setPlayerPosition}
-            placeholder="Their position (optional)"
-            placeholderTextColor={colors.muted}
-            autoCapitalize="words"
-          />
           <Pressable style={styles.addPlayerBtn} onPress={addPlayer}>
             <Text style={styles.addPlayerBtnText}>Add player</Text>
           </Pressable>
