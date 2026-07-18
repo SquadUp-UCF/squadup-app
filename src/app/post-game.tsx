@@ -62,7 +62,7 @@ function PickerSheet({
               <Text style={styles.pickerDoneText}>Done</Text>
             </Pressable>
           </View>
-          {children}
+          <View style={styles.pickerBody}>{children}</View>
         </View>
       </View>
     </Modal>
@@ -442,6 +442,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
+  pickerBody: { alignItems: 'center' },
   pickerDoneText: { fontFamily: fonts.bodyBold, fontSize: fontSizes.md, color: colors.green },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   chip: {
