@@ -1,18 +1,37 @@
-// Expanded view of a single game, pushed by tapping its card in the feed.
-// Mirrors squadup-front's GameDetailModal.jsx: hero, roster (with skill level
-// per participant), a notifications toggle, and join/leave.
+// Expanded view of a single game: hero banner, roster (with each player's
+// position), join/leave, and — for the host — guest management. The caller can
+// also set their own position and save the game.
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import {
+  ActivityIndicator,
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import { router, useLocalSearchParams } from 'expo-router';
-import { getGame, joinGame, leaveGame } from '@/services/games';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  getGame,
+  joinGame,
+  leaveGame,
+  addGuest,
+  removeGuest,
+  setMyPosition,
+} from '@/services/games';
 import { getUser } from '@/services/users';
 import { SportIcon, sportLabel } from '@/components/ui/sport-icon';
+import { GameBanner } from '@/components/games/game-banner';
 import { JoinPartySizeModal } from '@/components/games/join-party-size-modal';
 import { useSession } from '@/contexts/session-context';
-import { activeCount, hasCustomBanner, isLive, statusMeta } from '@/utils/games';
+import { useSavedGames } from '@/contexts/saved-games-context';
+import { positionsForSport } from '@/constants/positions';
+import { activeCount, isLive, statusMeta } from '@/utils/games';
 import { formatGameDateTime } from '@/utils/format';
 import { colors, fonts, fontSizes, radii, spacing } from '@/constants/theme';
 import type { Game } from '@/types/game';
@@ -20,13 +39,21 @@ import type { UserProfile } from '@/types/user';
 
 const NOTIFICATIONS_KEY_PREFIX = 'squadup_notifications_';
 
+function Chip({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
+  return (
+    <Pressable style={[styles.chip, selected && styles.chipSelected]} onPress={onPress}>
+      <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{label}</Text>
+    </Pressable>
+  );
+}
+
 export default function GameDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useSession();
+  const { isSaved, toggleSaved } = useSavedGames();
+  const insets = useSafeAreaInsets();
 
   const [game, setGame] = useState<Game | null>(null);
-  // Derived from `loadedId` rather than a separate boolean, so the effect
-  // below never needs a synchronous setState call at the top of its body.
   const [loadedId, setLoadedId] = useState<string | null>(null);
   const loading = loadedId !== id;
   const [roster, setRoster] = useState<Record<string, UserProfile | null>>({});
@@ -35,6 +62,10 @@ export default function GameDetailScreen() {
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState('');
   const [leaving, setLeaving] = useState(false);
+  const [guestName, setGuestName] = useState('');
+  const [guestPosition, setGuestPosition] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState('');
 
   useEffect(() => {
     if (!id) return;
@@ -45,18 +76,17 @@ export default function GameDetailScreen() {
     SecureStore.getItemAsync(`${NOTIFICATIONS_KEY_PREFIX}${id}`).then((v) => setNotifsEnabled(v === 'true'));
   }, [id]);
 
-  // Tracks which participant ids have already been (or are being) fetched,
-  // via a ref rather than reading `roster` state — keeps this effect's
-  // dependency array accurate without re-running on every roster update.
   const fetchedIdsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!game) return;
-    const joined = game.participants.filter((p) => p.status === 'joined');
-    joined.forEach((p) => {
-      if (fetchedIdsRef.current.has(p.user)) return;
-      fetchedIdsRef.current.add(p.user);
-      getUser(p.user).then((profile) => setRoster((prev) => ({ ...prev, [p.user]: profile })));
-    });
+    game.participants
+      .filter((p) => p.status === 'joined' && p.user)
+      .forEach((p) => {
+        const uid = p.user as string;
+        if (fetchedIdsRef.current.has(uid)) return;
+        fetchedIdsRef.current.add(uid);
+        getUser(uid).then((profile) => setRoster((prev) => ({ ...prev, [uid]: profile })));
+      });
   }, [game]);
 
   async function refresh() {
@@ -91,6 +121,52 @@ export default function GameDetailScreen() {
     }
   }
 
+  async function handleAddGuest() {
+    if (!game) return;
+    const name = guestName.trim();
+    if (!name) return;
+    setBusy(true);
+    setActionError('');
+    try {
+      const updated = await addGuest(game.id, { name, position: guestPosition || undefined });
+      setGame(updated);
+      setGuestName('');
+      setGuestPosition('');
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Could not add guest');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleRemoveGuest(index: number) {
+    if (!game) return;
+    setBusy(true);
+    setActionError('');
+    try {
+      const updated = await removeGuest(game.id, index);
+      setGame(updated);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Could not remove guest');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleSetMyPosition(position: string) {
+    if (!game) return;
+    setBusy(true);
+    setActionError('');
+    try {
+      const updated = await setMyPosition(game.id, position);
+      setGame(updated);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Could not update your position');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function toggleNotifications() {
     const next = !notifsEnabled;
     setNotifsEnabled(next);
@@ -110,33 +186,36 @@ export default function GameDetailScreen() {
   const joined = activeCount(game);
   const isHost = Boolean(user) && game.host === user!.id;
   const alreadyIn = game.participants.some((p) => p.user === user?.id && p.status === 'joined');
-  const joinable = !isHost && !alreadyIn && game.status !== 'locked' && game.status !== 'completed' && game.status !== 'cancelled';
-  const customBanner = hasCustomBanner(game);
-  const rosterEntries = game.participants.filter((p) => p.status === 'joined');
+  const joinable =
+    !isHost && !alreadyIn && game.status !== 'locked' && game.status !== 'completed' && game.status !== 'cancelled';
+  const rosterFull = joined >= game.max_players;
+  const saved = isSaved(game.id);
+  // Roster with original indices (needed to remove a guest by index).
+  const roster_ = game.participants
+    .map((p, index) => ({ p, index }))
+    .filter(({ p }) => p.status === 'joined');
+  const myEntry = game.participants.find((p) => p.user === user?.id && p.status === 'joined');
+  const sportPositions = positionsForSport(game.sport.toLowerCase());
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.hero}>
-        {customBanner ? (
-          <Image source={{ uri: game.photo_url }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-        ) : (
-          <LinearGradient colors={['#2F8F4E', '#1F6B3E']} style={StyleSheet.absoluteFill} />
-        )}
-        {!customBanner && (
-          <View style={styles.heroIcon}>
-            <SportIcon sport={game.sport} size={56} color="rgba(255,255,255,0.55)" />
-          </View>
-        )}
-        <View style={[styles.heroStatus, { backgroundColor: meta.bg }]}>
+        <GameBanner sport={game.sport} photoUrl={game.photo_url} iconSize={56} style={StyleSheet.absoluteFill} />
+        <View style={[styles.heroStatus, { top: insets.top + spacing.sm, backgroundColor: meta.bg }]}>
           <Text style={[styles.heroStatusText, { color: meta.color }]}>{live ? 'LIVE' : meta.label}</Text>
         </View>
-        <Pressable style={styles.closeBtn} onPress={() => router.back()}>
-          <Feather name="x" size={18} color={colors.text} />
-        </Pressable>
+        <View style={[styles.heroActions, { top: insets.top + spacing.sm }]}>
+          <Pressable style={styles.heroBtn} onPress={() => toggleSaved(game.id)}>
+            <Feather name="heart" size={18} color={saved ? colors.fillingUp : colors.text} />
+          </Pressable>
+          <Pressable style={styles.heroBtn} onPress={() => router.back()}>
+            <Feather name="x" size={18} color={colors.text} />
+          </Pressable>
+        </View>
       </View>
 
       <View style={styles.body}>
-        <View style={[styles.sportPill]}>
+        <View style={styles.sportPill}>
           <SportIcon sport={game.sport} size={16} color={colors.statusOpen.color} />
           <Text style={styles.sportPillLabel}>{sportLabel(game.sport)}</Text>
         </View>
@@ -167,30 +246,99 @@ export default function GameDetailScreen() {
         </Pressable>
 
         <View style={styles.roster}>
-          <Text style={styles.rosterLabel}>Players ({rosterEntries.length})</Text>
-          {rosterEntries.map((p) => {
-            const profile = roster[p.user];
-            const skill = profile?.preferred_positions?.[game.sport];
+          <Text style={styles.rosterLabel}>Players ({roster_.length})</Text>
+          {roster_.map(({ p, index }) => {
+            const isGuest = !p.user;
+            const profile = p.user ? roster[p.user] : null;
+            const name = isGuest ? p.name : profile?.username || 'Loading…';
             return (
-              <View key={p.user} style={styles.playerRow}>
+              <View key={index} style={styles.playerRow}>
                 <View style={styles.playerAvatar}>
                   {profile?.profile_picture ? (
                     <Image source={{ uri: profile.profile_picture }} style={styles.playerAvatarImage} />
                   ) : (
-                    <Text style={styles.playerAvatarInitial}>{(profile?.username || '?').slice(0, 2).toUpperCase()}</Text>
+                    <Text style={styles.playerAvatarInitial}>{(name || '?').slice(0, 2).toUpperCase()}</Text>
                   )}
                 </View>
-                <Text style={styles.playerName}>{profile?.username || 'Loading…'}</Text>
+                <Text style={styles.playerName}>{name}</Text>
                 {p.user === game.host && (
                   <View style={styles.hostBadge}>
                     <Text style={styles.hostBadgeText}>Host</Text>
                   </View>
                 )}
-                {skill && <Text style={styles.playerSkill}>{skill}</Text>}
+                {isGuest && (
+                  <View style={styles.guestBadge}>
+                    <Text style={styles.guestBadgeText}>Guest</Text>
+                  </View>
+                )}
+                {p.position ? (
+                  <Text style={styles.playerPosition}>{p.position}</Text>
+                ) : isGuest ? (
+                  <Text style={styles.playerUndecided}>Undecided</Text>
+                ) : null}
+                {isHost && isGuest && (
+                  <Pressable onPress={() => handleRemoveGuest(index)} disabled={busy} hitSlop={8}>
+                    <Feather name="x" size={16} color={colors.statusCancelled.color} />
+                  </Pressable>
+                )}
               </View>
             );
           })}
         </View>
+
+        {/* Set your own position (host or any joined player). */}
+        {myEntry && sportPositions.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>Your position</Text>
+            <View style={styles.chipRow}>
+              {sportPositions.map((pos) => (
+                <Chip
+                  key={pos}
+                  label={pos}
+                  selected={myEntry.position === pos}
+                  onPress={() => handleSetMyPosition(myEntry.position === pos ? '' : pos)}
+                />
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* Host: add a guest player. */}
+        {isHost && (
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>Add a guest</Text>
+            <TextInput
+              style={styles.guestInput}
+              value={guestName}
+              onChangeText={setGuestName}
+              placeholder="Player name"
+              placeholderTextColor={colors.muted}
+              autoCapitalize="words"
+              editable={!busy && !rosterFull}
+            />
+            {sportPositions.length > 0 && (
+              <View style={styles.chipRow}>
+                {sportPositions.map((pos) => (
+                  <Chip
+                    key={pos}
+                    label={pos}
+                    selected={guestPosition === pos}
+                    onPress={() => setGuestPosition(guestPosition === pos ? '' : pos)}
+                  />
+                ))}
+              </View>
+            )}
+            <Pressable
+              style={[styles.addGuestBtn, (busy || rosterFull) && styles.addGuestBtnDisabled]}
+              onPress={handleAddGuest}
+              disabled={busy || rosterFull}
+            >
+              <Text style={styles.addGuestBtnText}>{rosterFull ? 'Roster is full' : 'Add guest'}</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {actionError ? <Text style={styles.errorText}>{actionError}</Text> : null}
 
         {!isHost && alreadyIn && (
           <Pressable style={[styles.actionBtn, styles.leaveBtn]} onPress={handleLeave} disabled={leaving}>
@@ -225,14 +373,11 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.white },
   content: { paddingBottom: spacing.xxl },
   loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  hero: { height: 200, alignItems: 'center', justifyContent: 'center' },
-  heroIcon: { alignItems: 'center', justifyContent: 'center' },
-  heroStatus: { position: 'absolute', top: spacing.lg, left: spacing.lg, paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: radii.pill },
+  hero: { height: 200 },
+  heroStatus: { position: 'absolute', left: spacing.lg, paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: radii.pill },
   heroStatusText: { fontFamily: fonts.bodyBold, fontSize: fontSizes.xs },
-  closeBtn: {
-    position: 'absolute',
-    top: spacing.lg,
-    right: spacing.lg,
+  heroActions: { position: 'absolute', right: spacing.lg, flexDirection: 'row', gap: spacing.sm },
+  heroBtn: {
     width: 32,
     height: 32,
     borderRadius: 16,
@@ -285,10 +430,50 @@ const styles = StyleSheet.create({
   },
   playerAvatarImage: { width: '100%', height: '100%' },
   playerAvatarInitial: { fontFamily: fonts.bodyBold, fontSize: fontSizes.xs, color: colors.green },
-  playerName: { fontFamily: fonts.bodyMedium, fontSize: fontSizes.md, color: colors.text, flex: 1 },
+  playerName: { fontFamily: fonts.bodyMedium, fontSize: fontSizes.md, color: colors.text, flexShrink: 1 },
   hostBadge: { backgroundColor: colors.statusOpen.bg, paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: radii.pill },
   hostBadgeText: { fontFamily: fonts.bodyBold, fontSize: 10, color: colors.statusOpen.color },
-  playerSkill: { fontFamily: fonts.body, fontSize: fontSizes.xs, color: colors.muted },
+  guestBadge: { backgroundColor: colors.surface, paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: radii.pill },
+  guestBadgeText: { fontFamily: fonts.bodyBold, fontSize: 10, color: colors.muted },
+  playerPosition: { marginLeft: 'auto', fontFamily: fonts.bodyBold, fontSize: fontSizes.xs, color: colors.green },
+  playerUndecided: { marginLeft: 'auto', fontFamily: fonts.body, fontSize: fontSizes.xs, color: colors.muted, fontStyle: 'italic' },
+  section: { marginTop: spacing.md, gap: spacing.sm },
+  sectionLabel: { fontFamily: fonts.headingBold, fontSize: fontSizes.xs, textTransform: 'uppercase', letterSpacing: 0.6, color: colors.muted },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  chip: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: 7,
+    borderRadius: radii.pill,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  chipSelected: { backgroundColor: colors.green, borderColor: colors.green },
+  chipText: { fontFamily: fonts.bodyMedium, fontSize: fontSizes.sm, color: colors.text },
+  chipTextSelected: { color: colors.white, fontFamily: fonts.bodyBold },
+  guestInput: {
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    fontFamily: fonts.body,
+    fontSize: fontSizes.lg,
+    color: colors.text,
+  },
+  addGuestBtn: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.surface,
+    borderWidth: 1.5,
+    borderColor: colors.green,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+  },
+  addGuestBtnDisabled: { opacity: 0.5 },
+  addGuestBtnText: { fontFamily: fonts.bodyBold, fontSize: fontSizes.sm, color: colors.green },
+  errorText: { fontFamily: fonts.body, fontSize: fontSizes.sm, color: colors.danger },
   actionBtn: { marginTop: spacing.lg, borderRadius: radii.md, paddingVertical: 14, alignItems: 'center' },
   joinBtn: { backgroundColor: colors.green },
   joinBtnDisabled: { backgroundColor: '#E4E4E4' },
