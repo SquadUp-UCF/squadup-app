@@ -2,8 +2,9 @@
 // registry and unknown-sport fallback (a trophy icon), built on the icon sets
 // that ship with Expo instead of react-icons.
 import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { SpikeballIcon } from './spikeball-icon';
 
-type IconFamily = 'material' | 'community';
+type IconFamily = 'material' | 'community' | 'custom';
 
 const REGISTRY: Record<string, { family: IconFamily; name: string }> = {
   soccer: { family: 'material', name: 'sports-soccer' },
@@ -14,6 +15,7 @@ const REGISTRY: Record<string, { family: IconFamily; name: string }> = {
   golf: { family: 'material', name: 'sports-golf' },
   hockey: { family: 'material', name: 'sports-hockey' },
   volleyball: { family: 'material', name: 'sports-volleyball' },
+  spikeball: { family: 'custom', name: 'spikeball' },
   rugby: { family: 'material', name: 'sports-rugby' },
   cricket: { family: 'material', name: 'sports-cricket' },
   boxing: { family: 'material', name: 'sports-mma' },
@@ -35,8 +37,16 @@ const FALLBACK = { family: 'material' as IconFamily, name: 'emoji-events' };
 
 export const availableSports = Object.keys(REGISTRY);
 
+// Display-name overrides where the slug doesn't title-case cleanly (e.g. the
+// American-football slug is used for the intramural "Flag Football").
+const LABEL_OVERRIDES: Record<string, string> = {
+  football: 'Flag Football',
+};
+
 // Turns a registry slug ("table-tennis") into a readable label ("Table Tennis").
 export function sportLabel(slug: string) {
+  const key = String(slug || '').toLowerCase();
+  if (LABEL_OVERRIDES[key]) return LABEL_OVERRIDES[key];
   return slug
     .split('-')
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
@@ -51,6 +61,9 @@ type SportIconProps = {
 
 export function SportIcon({ sport, size = 24, color = '#000' }: SportIconProps) {
   const entry = REGISTRY[String(sport || '').toLowerCase()] || FALLBACK;
+  if (entry.family === 'custom') {
+    return <SpikeballIcon size={size} color={color} />;
+  }
   if (entry.family === 'community') {
     return <MaterialCommunityIcons name={entry.name as any} size={size} color={color} />;
   }
