@@ -1,60 +1,113 @@
-// Shown when "Join game" is tapped, before the actual join request fires —
-// mirrors squadup-front's JoinPartySizeModal.jsx. Lets the caller RSVP for a
-// group instead of just themselves, capped at however many spots are left.
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+// Shown when "Join game" is tapped, before the actual join request fires. Lets
+// the caller bring named guests (each with an optional, sport-specific position)
+// who each take a spot on the roster — or just join solo.
+import { useState } from 'react';
+import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import type { Game } from '@/types/game';
 import { activeCount } from '@/utils/games';
+import { Dropdown } from '@/components/ui/dropdown';
+import { positionsForSport } from '@/constants/positions';
 import { colors, fonts, fontSizes, radii, spacing } from '@/constants/theme';
-import { useState } from 'react';
+
+type Guest = { name: string; position?: string };
 
 type JoinPartySizeModalProps = {
   game: Game | null;
   busy?: boolean;
   error?: string;
-  onConfirm: (partySize: number) => void;
+  onConfirm: (guests: Guest[]) => void;
   onClose: () => void;
 };
 
 export function JoinPartySizeModal({ game, busy = false, error = '', onConfirm, onClose }: JoinPartySizeModalProps) {
-  const remaining = game ? Math.max(1, game.max_players - activeCount(game)) : 1;
-  const [partySize, setPartySize] = useState(1);
+  const [guests, setGuests] = useState<Guest[]>([]);
+  const [name, setName] = useState('');
+  const [position, setPosition] = useState('');
+
+  // You take one spot; guests take the rest.
+  const remaining = game ? Math.max(0, game.max_players - activeCount(game) - 1) : 0;
+  const guestSlotsLeft = remaining - guests.length;
+  const sportPositions = game ? positionsForSport(game.sport.toLowerCase()) : [];
+
+  function reset() {
+    setGuests([]);
+    setName('');
+    setPosition('');
+  }
+
+  function addGuest() {
+    const trimmed = name.trim();
+    if (!trimmed || guestSlotsLeft <= 0) return;
+    setGuests((prev) => [...prev, { name: trimmed, position: position || undefined }]);
+    setName('');
+    setPosition('');
+  }
+
+  function close() {
+    reset();
+    onClose();
+  }
+
+  function confirm() {
+    onConfirm(guests);
+  }
 
   return (
-    <Modal visible={Boolean(game)} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.overlay} onPress={busy ? undefined : onClose}>
+    <Modal visible={Boolean(game)} transparent animationType="fade" onRequestClose={busy ? undefined : close}>
+      <Pressable style={styles.overlay} onPress={busy ? undefined : close}>
         <Pressable style={styles.dialog} onPress={(e) => e.stopPropagation()}>
-          <Text style={styles.title}>How many are joining?</Text>
+          <Text style={styles.title}>Join game</Text>
           <Text style={styles.message}>
-            Include yourself in the count. {remaining} spot{remaining === 1 ? '' : 's'} left.
+            Bring guests? {remaining} spot{remaining === 1 ? '' : 's'} for guests.
           </Text>
 
-          <View style={styles.stepper}>
-            <Pressable
-              style={styles.stepperBtn}
-              onPress={() => setPartySize((n) => Math.max(1, n - 1))}
-              disabled={partySize <= 1}
-            >
-              <Text style={styles.stepperBtnLabel}>−</Text>
-            </Pressable>
-            <Text style={styles.stepperValue}>{partySize}</Text>
-            <Pressable
-              style={styles.stepperBtn}
-              onPress={() => setPartySize((n) => Math.min(remaining, n + 1))}
-              disabled={partySize >= remaining}
-            >
-              <Text style={styles.stepperBtnLabel}>+</Text>
-            </Pressable>
-          </View>
+          {guests.map((g, i) => (
+            <View key={`${g.name}-${i}`} style={styles.guestRow}>
+              <Text style={styles.guestName}>
+                {g.name}
+                {g.position ? <Text style={styles.guestPos}>{`  ·  ${g.position}`}</Text> : null}
+              </Text>
+              <Pressable onPress={() => setGuests((prev) => prev.filter((_, idx) => idx !== i))} hitSlop={8}>
+                <Feather name="x" size={16} color={colors.statusCancelled.color} />
+              </Pressable>
+            </View>
+          ))}
+
+          {guestSlotsLeft > 0 && (
+            <View style={styles.addBox}>
+              <TextInput
+                style={styles.input}
+                value={name}
+                onChangeText={setName}
+                placeholder="Guest name"
+                placeholderTextColor={colors.muted}
+                autoCapitalize="words"
+              />
+              {sportPositions.length > 0 && (
+                <Dropdown
+                  value={position}
+                  options={sportPositions}
+                  onChange={setPosition}
+                  placeholder="Position (optional)"
+                  noneLabel="No position"
+                />
+              )}
+              <Pressable style={styles.addBtn} onPress={addGuest}>
+                <Text style={styles.addBtnText}>Add guest</Text>
+              </Pressable>
+            </View>
+          )}
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
 
           <View style={styles.actions}>
-            <Pressable style={styles.cancelBtn} onPress={onClose} disabled={busy}>
+            <Pressable style={styles.cancelBtn} onPress={close} disabled={busy}>
               <Text style={styles.cancelLabel}>Cancel</Text>
             </Pressable>
-            <Pressable style={styles.confirmBtn} onPress={() => onConfirm(partySize)} disabled={busy}>
+            <Pressable style={styles.confirmBtn} onPress={confirm} disabled={busy}>
               <Text style={styles.confirmLabel}>
-                {busy ? 'Joining…' : partySize === 1 ? 'Join game' : `Join with ${partySize - 1} more`}
+                {busy ? 'Joining…' : guests.length === 0 ? 'Join game' : `Join with ${guests.length}`}
               </Text>
             </Pressable>
           </View>
@@ -69,20 +122,41 @@ const styles = StyleSheet.create({
   dialog: { width: '100%', maxWidth: 360, backgroundColor: colors.white, borderRadius: radii.lg, padding: spacing.xl, gap: spacing.sm },
   title: { fontFamily: fonts.heading, fontSize: fontSizes.xl, color: colors.text },
   message: { fontFamily: fonts.body, fontSize: fontSizes.md, color: colors.muted },
-  stepper: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xl, paddingVertical: spacing.md },
-  stepperBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  guestRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
+  },
+  guestName: { fontFamily: fonts.bodyMedium, fontSize: fontSizes.md, color: colors.text },
+  guestPos: { fontFamily: fonts.bodyBold, color: colors.green },
+  addBox: { gap: spacing.sm },
+  input: {
     borderWidth: 1.5,
     borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    fontFamily: fonts.body,
+    fontSize: fontSizes.lg,
+    color: colors.text,
   },
-  stepperBtnLabel: { fontFamily: fonts.headingBold, fontSize: fontSizes.xl, color: colors.green },
-  stepperValue: { fontFamily: fonts.headingBold, fontSize: fontSizes.xxl, color: colors.text, minWidth: 32, textAlign: 'center' },
+  addBtn: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.surface,
+    borderWidth: 1.5,
+    borderColor: colors.green,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+  },
+  addBtnText: { fontFamily: fonts.bodyBold, fontSize: fontSizes.sm, color: colors.green },
   error: { fontFamily: fonts.body, fontSize: fontSizes.sm, color: colors.danger },
-  actions: { flexDirection: 'row', gap: spacing.sm, justifyContent: 'flex-end' },
+  actions: { flexDirection: 'row', gap: spacing.sm, justifyContent: 'flex-end', marginTop: spacing.xs },
   cancelBtn: { paddingVertical: spacing.sm, paddingHorizontal: spacing.lg, borderRadius: radii.md },
   cancelLabel: { fontFamily: fonts.bodyBold, fontSize: fontSizes.md, color: colors.muted },
   confirmBtn: { backgroundColor: colors.green, paddingVertical: spacing.sm, paddingHorizontal: spacing.lg, borderRadius: radii.md },

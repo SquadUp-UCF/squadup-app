@@ -153,10 +153,15 @@ export async function deleteGame(id: string): Promise<void> {
   await apiFetch<void>(`/games/${id}`, { method: 'DELETE' });
 }
 
-export async function joinGame(id: string, _userId: string, partySize = 1): Promise<Game> {
+// Join a game, optionally bringing named guests (each an individual roster
+// entry with an optional position). No guests = a party of one.
+export async function joinGame(
+  id: string,
+  guests: { name: string; position?: string }[] = [],
+): Promise<Game> {
   const raw = await apiFetch<Record<string, any>>(`/games/${id}/join`, {
     method: 'POST',
-    body: { party_size: partySize },
+    body: guests.length > 0 ? { guests } : {},
   });
   return normalizeGame(raw);
 }
@@ -164,4 +169,28 @@ export async function joinGame(id: string, _userId: string, partySize = 1): Prom
 export async function leaveGame(id: string, _userId: string): Promise<Game> {
   const raw = await apiFetch<Record<string, any>>(`/games/${id}/leave`, { method: 'POST' });
   return normalizeGame(raw);
+}
+
+/** Host-only: mark a game as finished (completed). */
+export async function completeGame(id: string): Promise<Game> {
+  const raw = await apiFetch<Record<string, any>>(`/games/${id}/complete`, { method: 'POST' });
+  return normalizeGame(raw);
+}
+
+/** Submit thumbs up/down ratings for the other players of a completed game. */
+export async function rateGame(
+  id: string,
+  ratings: { user: string; value: 'up' | 'down' }[],
+): Promise<Game> {
+  const raw = await apiFetch<Record<string, any>>(`/games/${id}/ratings`, {
+    method: 'POST',
+    body: { ratings },
+  });
+  return normalizeGame(raw);
+}
+
+/** Completed games the caller played in but hasn't rated yet. */
+export async function getPendingRatings(): Promise<Game[]> {
+  const raw = await apiFetch<Record<string, any>[]>('/games/pending-ratings');
+  return raw.map(normalizeGame);
 }

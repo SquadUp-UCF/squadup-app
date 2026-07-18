@@ -24,6 +24,8 @@ import {
   removeGuest,
   setMyPosition,
   deleteGame,
+  completeGame,
+  rateGame,
 } from '@/services/games';
 import { getUser } from '@/services/users';
 import { SportIcon, sportLabel } from '@/components/ui/sport-icon';
@@ -31,6 +33,7 @@ import { GameBanner } from '@/components/games/game-banner';
 import { Dropdown } from '@/components/ui/dropdown';
 import { JoinPartySizeModal } from '@/components/games/join-party-size-modal';
 import { ConfirmModal } from '@/components/games/confirm-modal';
+import { RatingModal } from '@/components/games/rating-modal';
 import { useSession } from '@/contexts/session-context';
 import { useSavedGames } from '@/contexts/saved-games-context';
 import { positionsForSport } from '@/constants/positions';
@@ -63,6 +66,9 @@ export default function GameDetailScreen() {
   const [actionError, setActionError] = useState('');
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [completing, setCompleting] = useState(false);
+  const [ratingGame, setRatingGame] = useState<Game | null>(null);
+  const [ratingBusy, setRatingBusy] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -92,16 +98,16 @@ export default function GameDetailScreen() {
     setGame(data);
   }
 
-  async function handleJoinConfirmed(partySize: number) {
+  async function handleJoinConfirmed(guests: { name: string; position?: string }[]) {
     if (!game || !user) return;
     setJoinError('');
     setJoining(true);
     try {
-      await joinGame(game.id, user.id, partySize);
+      await joinGame(game.id, guests);
       await refresh();
       setJoinOpen(false);
-    } catch {
-      setJoinError('Could not join the game.');
+    } catch (err) {
+      setJoinError(err instanceof Error ? err.message : 'Could not join the game.');
     } finally {
       setJoining(false);
     }
@@ -175,6 +181,35 @@ export default function GameDetailScreen() {
       setActionError(err instanceof Error ? err.message : 'Could not delete game');
       setDeleting(false);
       setConfirmingDelete(false);
+    }
+  }
+
+  async function handleComplete() {
+    if (!game) return;
+    setCompleting(true);
+    setActionError('');
+    try {
+      const updated = await completeGame(game.id);
+      setGame(updated);
+      // Prompt the host to rate the other players right away.
+      setRatingGame(updated);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Could not finish the game');
+    } finally {
+      setCompleting(false);
+    }
+  }
+
+  async function handleSubmitRatings(ratings: { user: string; value: 'up' | 'down' }[]) {
+    if (!ratingGame) return;
+    setRatingBusy(true);
+    try {
+      await rateGame(ratingGame.id, ratings);
+      setRatingGame(null);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Could not submit ratings');
+    } finally {
+      setRatingBusy(false);
     }
   }
 
@@ -274,6 +309,13 @@ export default function GameDetailScreen() {
           </View>
         )}
 
+        {isHost && game.status !== 'completed' && game.status !== 'cancelled' && (
+          <Pressable style={styles.finishBtn} onPress={handleComplete} disabled={completing}>
+            <Feather name="check-circle" size={16} color={colors.white} />
+            <Text style={styles.finishBtnText}>{completing ? 'Finishing…' : 'Mark as finished'}</Text>
+          </Pressable>
+        )}
+
         <View style={styles.roster}>
           <Text style={styles.rosterLabel}>Players ({roster_.length})</Text>
           {roster_.map(({ p, index }) => {
@@ -281,7 +323,12 @@ export default function GameDetailScreen() {
             const profile = p.user ? roster[p.user] : null;
             const name = isGuest ? p.name : profile?.username || 'Loading…';
             return (
-              <View key={index} style={styles.playerRow}>
+              <Pressable
+                key={index}
+                style={styles.playerRow}
+                onPress={p.user ? () => router.push({ pathname: '/user/[id]', params: { id: p.user! } }) : undefined}
+                disabled={isGuest}
+              >
                 <View style={styles.playerAvatar}>
                   {profile?.profile_picture ? (
                     <Image source={{ uri: profile.profile_picture }} style={styles.playerAvatarImage} />
@@ -310,7 +357,8 @@ export default function GameDetailScreen() {
                     <Feather name="x" size={16} color={colors.statusCancelled.color} />
                   </Pressable>
                 )}
-              </View>
+                {!isGuest && <Feather name="chevron-right" size={16} color={colors.muted} />}
+              </Pressable>
             );
           })}
         </View>
@@ -399,6 +447,14 @@ export default function GameDetailScreen() {
         onConfirm={handleDelete}
         onClose={() => setConfirmingDelete(false)}
       />
+
+      <RatingModal
+        game={ratingGame}
+        currentUserId={user?.id}
+        busy={ratingBusy}
+        onSubmit={handleSubmitRatings}
+        onClose={() => setRatingGame(null)}
+      />
     </ScrollView>
   );
 }
@@ -464,6 +520,17 @@ const styles = StyleSheet.create({
   hostBtnDanger: { borderColor: colors.statusCancelled.color },
   hostBtnText: { fontFamily: fonts.bodyBold, fontSize: fontSizes.sm, color: colors.green },
   hostBtnTextDanger: { color: colors.statusCancelled.color },
+  finishBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.green,
+    borderRadius: radii.md,
+    paddingVertical: spacing.md,
+    marginTop: spacing.sm,
+  },
+  finishBtnText: { fontFamily: fonts.bodyBold, fontSize: fontSizes.md, color: colors.white },
   roster: { marginTop: spacing.md, gap: spacing.sm },
   rosterLabel: { fontFamily: fonts.headingBold, fontSize: fontSizes.xs, textTransform: 'uppercase', letterSpacing: 0.6, color: colors.muted },
   playerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },

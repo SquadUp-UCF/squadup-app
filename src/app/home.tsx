@@ -7,10 +7,11 @@ import * as Location from 'expo-location';
 import { GameCard } from '@/components/games/game-card';
 import { ConfirmModal } from '@/components/games/confirm-modal';
 import { JoinPartySizeModal } from '@/components/games/join-party-size-modal';
+import { RatingModal } from '@/components/games/rating-modal';
 import { FeedControls, type ViewMode, type SortKey, type SkillFilter } from '@/components/games/feed-controls';
 import { GamesMap } from '@/components/games/games-map';
 import { Logo } from '@/components/ui/logo';
-import { discoverGames, deleteGame, joinGame, leaveGame } from '@/services/games';
+import { discoverGames, deleteGame, joinGame, leaveGame, getPendingRatings, rateGame } from '@/services/games';
 import { useSession } from '@/contexts/session-context';
 import { activeCount } from '@/utils/games';
 import { distanceKm } from '@/utils/geo';
@@ -39,9 +40,27 @@ export default function HomeScreen() {
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [distanceNote, setDistanceNote] = useState<string | null>(null);
 
+  // Completed games the user still owes ratings for — shown one at a time.
+  const [pendingRatings, setPendingRatings] = useState<Game[]>([]);
+  const [ratingBusy, setRatingBusy] = useState(false);
+
   const loadGames = useCallback(() => {
     return discoverGames().then((data) => setGames(data));
   }, []);
+
+  async function handleRateSubmit(ratings: { user: string; value: 'up' | 'down' }[]) {
+    const current = pendingRatings[0];
+    if (!current) return;
+    setRatingBusy(true);
+    try {
+      await rateGame(current.id, ratings);
+      setPendingRatings((prev) => prev.slice(1));
+    } catch {
+      // Leave it in the queue to try again later.
+    } finally {
+      setRatingBusy(false);
+    }
+  }
 
   async function ensureLocation() {
     try {
@@ -70,7 +89,10 @@ export default function HomeScreen() {
 
     const sorted = [...list];
     if (sortBy === 'players') {
-      sorted.sort((a, b) => activeCount(b) - activeCount(a));
+      // Nearly-full games first: fewest missing spots (max - active) first,
+      // e.g. 9/10, then 6/8, then 12/16.
+      const missing = (g: Game) => g.max_players - activeCount(g);
+      sorted.sort((a, b) => missing(a) - missing(b));
     } else if (sortBy === 'distance' && userLocation) {
       const dist = (g: Game) =>
         g.latitude != null && g.longitude != null
@@ -97,6 +119,12 @@ export default function HomeScreen() {
       loadGames().finally(() => {
         if (active) setIsLoading(false);
       });
+      // Prompt for any completed games the user still needs to rate.
+      getPendingRatings()
+        .then((g) => {
+          if (active) setPendingRatings(g);
+        })
+        .catch(() => {});
       return () => {
         active = false;
       };
@@ -109,16 +137,16 @@ export default function HomeScreen() {
     setRefreshing(false);
   }
 
-  async function handleJoinConfirmed(partySize: number) {
+  async function handleJoinConfirmed(guests: { name: string; position?: string }[]) {
     if (!joinTarget || !user) return;
     setJoinError('');
     setJoiningId(joinTarget.id);
     try {
-      await joinGame(joinTarget.id, user.id, partySize);
+      await joinGame(joinTarget.id, guests);
       await loadGames();
       setJoinTarget(null);
-    } catch {
-      setJoinError('Could not join the game.');
+    } catch (err) {
+      setJoinError(err instanceof Error ? err.message : 'Could not join the game.');
     } finally {
       setJoiningId(null);
     }
@@ -242,6 +270,14 @@ export default function HomeScreen() {
         error={joinError}
         onConfirm={handleJoinConfirmed}
         onClose={() => setJoinTarget(null)}
+      />
+
+      <RatingModal
+        game={pendingRatings[0] ?? null}
+        currentUserId={user?.id}
+        busy={ratingBusy}
+        onSubmit={handleRateSubmit}
+        onClose={() => setPendingRatings([])}
       />
 
       <ConfirmModal
