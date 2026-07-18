@@ -6,13 +6,17 @@ import { router } from 'expo-router';
 import { OtpInput } from '@/components/ui/otp-input';
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { verifyCode, resendCode } from '@/services/auth';
+import { getMe } from '@/services/users';
+import { setAuthToken } from '@/lib/auth-token';
 import { useAuthFlow } from '@/contexts/auth-flow-context';
+import { useSession } from '@/contexts/session-context';
 import { colors, fonts, fontSizes, spacing } from '@/constants/theme';
 
 const RESEND_COOLDOWN_SECONDS = 60;
 
 export default function VerifyScreen() {
-  const { email } = useAuthFlow();
+  const { email, token } = useAuthFlow();
+  const { login: setSession } = useSession();
 
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
@@ -35,6 +39,13 @@ export default function VerifyScreen() {
     setIsSubmitting(true);
     try {
       await verifyCode(email, code);
+      // Verification activates the account, so the registration token is now
+      // usable — establish the session before continuing to profile setup.
+      if (token) {
+        setAuthToken(token);
+        const user = await getMe();
+        await setSession(token, user);
+      }
       router.push('/profile-setup');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');

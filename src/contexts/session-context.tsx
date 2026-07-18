@@ -4,6 +4,7 @@
 // localStorage token.
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import * as SecureStore from 'expo-secure-store';
+import { setAuthToken } from '@/lib/auth-token';
 import type { UserProfile } from '@/types/user';
 
 const STORAGE_KEY = 'squadup_session';
@@ -33,6 +34,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         const stored: StoredSession = JSON.parse(raw);
         setToken(stored.token);
         setUser(stored.user);
+        setAuthToken(stored.token); // keep the API client's token in sync
       })
       .finally(() => setIsHydrating(false));
   }, []);
@@ -48,6 +50,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (nextToken: string, nextUser: UserProfile) => {
     setToken(nextToken);
     setUser(nextUser);
+    setAuthToken(nextToken);
     await persist({ token: nextToken, user: nextUser });
   }, []);
 
@@ -66,6 +69,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(async () => {
     setToken(null);
     setUser(null);
+    setAuthToken(null);
     await persist(null);
   }, []);
 

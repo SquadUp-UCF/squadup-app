@@ -1,83 +1,84 @@
-// another fake backend (sep file to follow backend api structure
-// of splitting auth and users)
+// User endpoints — /api/users/*. Token attached automatically by apiFetch.
+//
+// Note on skill level: the app surfaces a user's per-sport skill level under
+// `preferred_positions` (the field the UI reads), but the API stores it in
+// `skill_levels`. This adapter maps between the two so screens are unchanged.
+import { apiFetch } from '@/lib/http';
+import { mediaUrl } from '@/lib/api-config';
 import type { UserProfile } from '@/types/user';
 
-function delay(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+// Map a serialized API user (/users/me carries `_id`; /users/:id carries `id`)
+// into the app's UserProfile.
+function toUserProfile(raw: Record<string, any>): UserProfile {
+  return {
+    id: String(raw._id ?? raw.id ?? ''),
+    first_name: raw.first_name ?? '',
+    last_name: raw.last_name ?? '',
+    email: raw.email ?? '',
+    username: raw.username ?? '',
+    // Relative avatar paths (e.g. /uploads/avatars/x.jpg) resolve to absolute
+    // URLs; a null stays null.
+    profile_picture: mediaUrl(raw.profile_picture),
+    preferred_positions: raw.skill_levels ?? raw.preferred_positions ?? {},
+  };
 }
 
-// Shared directory of mock profiles — also used by services/auth.ts (the
-// logged-in user always resolves to DEMO_USER_ID in this mocked world) and by
-// the game-detail roster lookup, so a host/participant shown in a game always
-// has a matching profile here.
-export const DEMO_USER_ID = 'fake-id';
-
-export const MOCK_USERS: Record<string, UserProfile> = {
-  [DEMO_USER_ID]: {
-    id: DEMO_USER_ID,
-    first_name: 'Test',
-    last_name: 'User',
-    email: 'test@ucf.edu',
-    username: 'testuser',
-    profile_picture: null,
-    preferred_positions: {},
-  },
-  'demo-host-2': {
-    id: 'demo-host-2',
-    first_name: 'Marcus',
-    last_name: 'Reed',
-    email: 'mr123456@ucf.edu',
-    username: 'marcusr',
-    profile_picture: null,
-    preferred_positions: { basketball: 'Intermediate', volleyball: 'Pro' },
-  },
-  'demo-host-3': {
-    id: 'demo-host-3',
-    first_name: 'Ava',
-    last_name: 'Chen',
-    email: 'ac234567@ucf.edu',
-    username: 'avachen',
-    profile_picture: null,
-    preferred_positions: { soccer: 'Pro' },
-  },
-  'demo-host-4': {
-    id: 'demo-host-4',
-    first_name: 'Jordan',
-    last_name: 'Lee',
-    email: 'jl345678@ucf.edu',
-    username: 'jlee',
-    profile_picture: null,
-    preferred_positions: { 'table-tennis': 'Beginner' },
-  },
-};
-
-const TAKEN_USERNAMES = new Set(['admin', 'test', 'squadup', 'marcusr', 'avachen', 'jlee']);
+export async function getMe(): Promise<UserProfile> {
+  const raw = await apiFetch<Record<string, any>>('/users/me');
+  return toUserProfile(raw);
+}
 
 export async function getUser(id: string): Promise<UserProfile | null> {
-  await delay(300);
-  return MOCK_USERS[id] || null;
+  try {
+    const raw = await apiFetch<Record<string, any>>(`/users/${id}`);
+    return toUserProfile(raw);
+  } catch {
+    return null;
+  }
 }
 
 export async function checkUsernameAvailable(username: string): Promise<boolean> {
-  await delay(400); // mirrors the debounced check in ProfileSetup.jsx
-  return !TAKEN_USERNAMES.has(username.trim().toLowerCase());
+  try {
+    const res = await apiFetch<{ available: boolean }>('/users/username-available', {
+      query: { username },
+    });
+    return res.available;
+  } catch {
+    // If the check can't run (e.g. before the session is authenticated), don't
+    // block the user — the server rejects a real clash with a 409 on save.
+    return true;
+  }
 }
 
 export async function updateProfile(
-  userId: string,
-  input: Partial<Pick<UserProfile, 'first_name' | 'last_name' | 'username' | 'preferred_positions'>>
+  _userId: string,
+  input: Partial<Pick<UserProfile, 'first_name' | 'last_name' | 'username' | 'preferred_positions'>>,
 ): Promise<UserProfile> {
-  await delay(600);
-  const current = MOCK_USERS[userId] || MOCK_USERS[DEMO_USER_ID];
-  const updated = { ...current, ...input };
-  MOCK_USERS[userId] = updated;
-  return updated;
+  const body: Record<string, unknown> = {};
+  if (input.first_name !== undefined) body.first_name = input.first_name;
+  if (input.last_name !== undefined) body.last_name = input.last_name;
+  if (input.username !== undefined) body.username = input.username;
+  // The app's `preferred_positions` is the user's skill level per sport.
+  if (input.preferred_positions !== undefined) body.skill_levels = input.preferred_positions;
+  const raw = await apiFetch<Record<string, any>>('/users/me', { method: 'PATCH', body });
+  return toUserProfile(raw);
 }
 
-export async function uploadAvatar(userId: string, uri: string | null): Promise<UserProfile> {
-  await delay(500);
-  const current = MOCK_USERS[userId] || MOCK_USERS[DEMO_USER_ID];
-  const updated = { ...current, profile_picture: uri };
-  MOCK_USERS[userId] = updated;
-  return updated;
+export async function uploadAvatar(_userId: string, uri: string | null): Promise<UserProfile> {
+  if (!uri) {
+    const raw = await apiFetch<Record<string, any>>('/users/me/avatar', { method: 'DELETE' });
+    return toUserProfile(raw);
+  }
+  const name = uri.split('/').pop() || 'avatar.jpg';
+  const ext = (/\.(\w+)$/.exec(name)?.[1] || 'jpg').toLowerCase();
+  const type = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+  const form = new FormData();
+  // React Native's file-part shape for multipart uploads.
+  form.append('avatar', { uri, name, type } as unknown as Blob);
+  const raw = await apiFetch<Record<string, any>>('/users/me/avatar', {
+    method: 'PUT',
+    body: form,
+    multipart: true,
+  });
+  return toUserProfile(raw);
 }

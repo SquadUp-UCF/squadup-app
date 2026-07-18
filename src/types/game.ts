@@ -19,4 +19,8 @@ export type Game = {
   participants: Participant[];
   photo_url: string;
   createdAt?: string; // drives the "NEW" badge
+  // Optional fields the real API provides (map pin + target skill level).
+  latitude?: number;
+  longitude?: number;
+  skill_level?: 'all' | 'beginner' | 'intermediate' | 'pro';
 };

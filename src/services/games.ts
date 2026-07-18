@@ -1,122 +1,58 @@
-// mock api components (game feed/creation/join/leave/host actions)
+// Game endpoints — /api/games. The bearer token is attached automatically by
+// apiFetch (see lib/auth-token), so these stay token-less like the mock they
+// replace. The API returns serialized Mongoose docs (with `_id`), so results
+// are normalized to the app's Game shape.
+import { apiFetch } from '@/lib/http';
 import type { Game, Participant } from '@/types/game';
-import { isActive } from '@/utils/games';
-import { DEMO_USER_ID } from './users';
 
-function delay(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+// UCF main campus — default coordinates for games created without a map pin
+// (the create form doesn't collect one yet, but the API requires lat/long).
+const UCF = { latitude: 28.6024, longitude: -81.2001 };
+
+function normalizeGame(raw: Record<string, any>): Game {
+  return {
+    id: String(raw._id ?? raw.id),
+    host: String(raw.host),
+    sport: raw.sport ?? '',
+    description: raw.description,
+    location: raw.location ?? '',
+    start_time: raw.start_time,
+    min_players: raw.min_players,
+    max_players: raw.max_players,
+    status: raw.status ?? 'open',
+    participants: (raw.participants ?? []).map(
+      (p: Record<string, any>): Participant => ({
+        user: String(p.user ?? ''),
+        status: p.status,
+        joined_at: p.joined_at,
+        party_size: p.party_size,
+      }),
+    ),
+    photo_url: raw.photo_url ?? '',
+    createdAt: raw.createdAt ?? raw.created_at,
+    latitude: raw.latitude,
+    longitude: raw.longitude,
+    skill_level: raw.skill_level,
+  };
 }
-
-function isoOffset(ms: number) {
-  return new Date(Date.now() + ms).toISOString();
-}
-
-const HOUR = 60 * 60 * 1000;
-const DAY = 24 * HOUR;
-
-// Seeded with a mix of states so LIVE/NEW/"Filling up"/host/already-joined/
-// full are all visible on the feed without a real backend.
-let MOCK_GAMES: Game[] = [
-  {
-    id: '1',
-    host: 'demo-host-2',
-    sport: 'basketball',
-    location: 'Rec Center Court 2',
-    description: 'Casual pickup, all levels welcome.',
-    start_time: isoOffset(-20 * 60 * 1000), // started 20 min ago -> LIVE
-    min_players: 2,
-    max_players: 10,
-    status: 'open',
-    participants: [
-      { user: 'demo-host-2', status: 'joined', joined_at: isoOffset(-DAY), party_size: 1 },
-      { user: 'demo-host-3', status: 'joined', joined_at: isoOffset(-HOUR), party_size: 2 },
-    ],
-    photo_url: '',
-    createdAt: isoOffset(-3 * DAY),
-  },
-  {
-    id: '2',
-    host: 'demo-host-3',
-    sport: 'soccer',
-    location: 'Intramural Field 3',
-    description: 'Bring cleats, we play to 5.',
-    start_time: isoOffset(2 * DAY),
-    min_players: 6,
-    max_players: 10,
-    status: 'open',
-    participants: [
-      { user: 'demo-host-3', status: 'joined', joined_at: isoOffset(-2 * HOUR), party_size: 4 },
-      { user: 'demo-host-4', status: 'joined', joined_at: isoOffset(-HOUR), party_size: 4 },
-    ],
-    photo_url: '',
-    createdAt: isoOffset(-2 * HOUR), // < 24h -> NEW
-  },
-  {
-    id: '3',
-    host: DEMO_USER_ID,
-    sport: 'tennis',
-    location: 'UCF Tennis Courts',
-    description: 'Looking for a doubles partner.',
-    start_time: isoOffset(DAY),
-    min_players: 2,
-    max_players: 4,
-    status: 'open',
-    participants: [{ user: DEMO_USER_ID, status: 'joined', joined_at: isoOffset(-5 * DAY), party_size: 1 }],
-    photo_url: '',
-    createdAt: isoOffset(-5 * DAY),
-  },
-  {
-    id: '4',
-    host: 'demo-host-2',
-    sport: 'volleyball',
-    location: 'Sand Volleyball Courts',
-    start_time: isoOffset(3 * HOUR),
-    min_players: 4,
-    max_players: 6,
-    status: 'locked',
-    participants: [
-      { user: 'demo-host-2', status: 'joined', joined_at: isoOffset(-DAY), party_size: 3 },
-      { user: 'demo-host-4', status: 'joined', joined_at: isoOffset(-HOUR), party_size: 3 },
-    ],
-    photo_url: '',
-    createdAt: isoOffset(-6 * DAY),
-  },
-  {
-    id: '5',
-    host: 'demo-host-4',
-    sport: 'table-tennis',
-    location: 'Student Union Game Room',
-    start_time: isoOffset(5 * HOUR),
-    min_players: 2,
-    max_players: 4,
-    status: 'open',
-    participants: [
-      { user: 'demo-host-4', status: 'joined', joined_at: isoOffset(-DAY), party_size: 1 },
-      { user: DEMO_USER_ID, status: 'joined', joined_at: isoOffset(-HOUR), party_size: 1 },
-    ],
-    photo_url: '',
-    createdAt: isoOffset(-4 * DAY),
-  },
-];
 
 export async function discoverGames(): Promise<Game[]> {
-  await delay(500);
-  return MOCK_GAMES.filter((g) => isActive(g));
+  const games = await apiFetch<Record<string, any>[]>('/games');
+  return games.map(normalizeGame);
 }
 
 export async function getGame(id: string): Promise<Game | null> {
-  await delay(300);
-  return MOCK_GAMES.find((g) => g.id === id) || null;
+  try {
+    const raw = await apiFetch<Record<string, any>>(`/games/${id}`);
+    return normalizeGame(raw);
+  } catch {
+    return null;
+  }
 }
 
-export async function getMyGames(userId: string, role: 'playing' | 'hosting'): Promise<Game[]> {
-  await delay(400);
-  if (role === 'hosting') {
-    return MOCK_GAMES.filter((g) => g.host === userId);
-  }
-  return MOCK_GAMES.filter((g) =>
-    g.participants.some((p) => p.user === userId && p.status === 'joined')
-  );
+export async function getMyGames(_userId: string, role: 'playing' | 'hosting'): Promise<Game[]> {
+  const games = await apiFetch<Record<string, any>[]>('/games/mine', { query: { role } });
+  return games.map(normalizeGame);
 }
 
 export type GameInput = {
@@ -129,58 +65,62 @@ export type GameInput = {
   photo_url?: string;
 };
 
-export async function createGame(input: GameInput, hostId: string): Promise<Game> {
-  await delay(700);
-  const newGame: Game = {
-    id: String(Date.now()),
-    host: hostId,
-    status: 'open',
-    participants: [{ user: hostId, status: 'joined', joined_at: new Date().toISOString(), party_size: 1 }],
-    photo_url: input.photo_url || '',
-    createdAt: new Date().toISOString(),
-    ...input,
-  };
-  MOCK_GAMES = [newGame, ...MOCK_GAMES]; // mutates in-memory, so it shows up in discoverGames() after creating
-  return newGame;
+// Only http(s) banner URLs are meaningful to the API; a local file/content URI
+// picked on-device can't be served, so it's dropped (the game falls back to its
+// sport's stock banner) rather than stored as an unreachable path.
+function remoteBanner(photo?: string): string | undefined {
+  return photo && /^https?:\/\//i.test(photo) ? photo : undefined;
+}
+
+// `hostId` is derived from the token server-side; kept in the signature for the
+// call sites that still pass it.
+export async function createGame(input: GameInput, _hostId: string): Promise<Game> {
+  const raw = await apiFetch<Record<string, any>>('/games', {
+    method: 'POST',
+    body: {
+      sport: input.sport,
+      location: input.location,
+      description: input.description,
+      start_time: input.start_time,
+      min_players: input.min_players,
+      max_players: input.max_players,
+      latitude: UCF.latitude,
+      longitude: UCF.longitude,
+      photo_url: remoteBanner(input.photo_url),
+    },
+  });
+  return normalizeGame(raw);
 }
 
 export async function updateGame(id: string, input: GameInput): Promise<Game> {
-  await delay(700);
-  const existing = MOCK_GAMES.find((g) => g.id === id);
-  if (!existing) throw new Error('Game not found');
-  const updated: Game = { ...existing, ...input };
-  MOCK_GAMES = MOCK_GAMES.map((g) => (g.id === id ? updated : g));
-  return updated;
+  const raw = await apiFetch<Record<string, any>>(`/games/${id}`, {
+    method: 'PATCH',
+    body: {
+      sport: input.sport,
+      location: input.location,
+      description: input.description,
+      start_time: input.start_time,
+      min_players: input.min_players,
+      max_players: input.max_players,
+      photo_url: remoteBanner(input.photo_url),
+    },
+  });
+  return normalizeGame(raw);
 }
 
 export async function deleteGame(id: string): Promise<void> {
-  await delay(500);
-  MOCK_GAMES = MOCK_GAMES.filter((g) => g.id !== id);
+  await apiFetch<void>(`/games/${id}`, { method: 'DELETE' });
 }
 
-export async function joinGame(id: string, userId: string, partySize = 1): Promise<Game> {
-  await delay(500);
-  const existing = MOCK_GAMES.find((g) => g.id === id);
-  if (!existing) throw new Error('Game not found');
-
-  const participants: Participant[] = [
-    ...existing.participants.filter((p) => p.user !== userId),
-    { user: userId, status: 'joined', joined_at: new Date().toISOString(), party_size: partySize },
-  ];
-  const updated: Game = { ...existing, participants };
-  MOCK_GAMES = MOCK_GAMES.map((g) => (g.id === id ? updated : g));
-  return updated;
+export async function joinGame(id: string, _userId: string, partySize = 1): Promise<Game> {
+  const raw = await apiFetch<Record<string, any>>(`/games/${id}/join`, {
+    method: 'POST',
+    body: { party_size: partySize },
+  });
+  return normalizeGame(raw);
 }
 
-export async function leaveGame(id: string, userId: string): Promise<Game> {
-  await delay(400);
-  const existing = MOCK_GAMES.find((g) => g.id === id);
-  if (!existing) throw new Error('Game not found');
-
-  const participants = existing.participants.map((p) =>
-    p.user === userId ? { ...p, status: 'cancelled' as const } : p
-  );
-  const updated: Game = { ...existing, participants };
-  MOCK_GAMES = MOCK_GAMES.map((g) => (g.id === id ? updated : g));
-  return updated;
+export async function leaveGame(id: string, _userId: string): Promise<Game> {
+  const raw = await apiFetch<Record<string, any>>(`/games/${id}/leave`, { method: 'POST' });
+  return normalizeGame(raw);
 }
