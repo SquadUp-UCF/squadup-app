@@ -87,11 +87,19 @@ export default function HomeScreen() {
   const hasFilters = sportFilter !== '' || skillFilter !== null;
 
   // Re-runs every time this screen comes back into focus (not just on first
-  // mount) — so returning from Post Game picks up the newly created game.
+  // mount) — so returning from Post Game picks up the newly created game. Only
+  // the very first load shows the full-screen spinner; later refocuses refresh
+  // in the background so the list stays mounted and keeps its scroll position
+  // (returning from a game lands on the same spot, not the top).
   useFocusEffect(
     useCallback(() => {
-      setIsLoading(true);
-      loadGames().finally(() => setIsLoading(false));
+      let active = true;
+      loadGames().finally(() => {
+        if (active) setIsLoading(false);
+      });
+      return () => {
+        active = false;
+      };
     }, [loadGames])
   );
 
