@@ -28,6 +28,7 @@ function normalizeGame(raw: Record<string, any>): Game {
         status: p.status,
         joined_at: p.joined_at,
         party_size: p.party_size,
+        added_by: p.added_by != null ? String(p.added_by) : undefined,
       }),
     ),
     photo_url: raw.photo_url ?? '',

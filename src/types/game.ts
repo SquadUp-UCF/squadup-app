@@ -5,6 +5,10 @@ export type Participant = {
   status: 'joined' | 'cancelled';
   joined_at: string;
   party_size?: number; // one account can RSVP for a group; defaults to 1
+  // For a guest, the account that added them — the host, or the player who
+  // brought them. Either of those can remove them again. Absent on registered
+  // players and on guests created before the field existed (host-only then).
+  added_by?: string;
 };
 
 export type Game = {

@@ -362,8 +362,16 @@ export default function GameDetailScreen() {
                 ) : isGuest ? (
                   <Text style={styles.playerUndecided}>Undecided</Text>
                 ) : null}
-                {isHost && isGuest && (
-                  <Pressable onPress={() => handleRemoveGuest(index)} disabled={busy} hitSlop={8}>
+                {/* The host manages the whole roster; everyone else can take
+                    back a guest they brought themselves. */}
+                {isGuest && (isHost || (!!user && p.added_by === user.id)) && (
+                  <Pressable
+                    onPress={() => handleRemoveGuest(index)}
+                    disabled={busy}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Remove guest ${name}`}
+                  >
                     <Feather name="x" size={16} color={colors.statusCancelled.color} />
                   </Pressable>
                 )}
