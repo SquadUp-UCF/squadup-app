@@ -2,7 +2,7 @@
 // skill level, the host's own position, and (on create) initial guest players.
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, Platform } from 'react-native';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { TextField } from '@/components/ui/text-field';
 import { SportPicker } from '@/components/ui/sport-picker';
@@ -87,20 +87,33 @@ export default function PostGameScreen() {
     });
   }, [gameId]);
 
-  function onValueChangeDate(_event: unknown, selected?: Date) {
-    setShowDatePicker(false);
-    if (!selected) return;
-    const updated = new Date(startDate);
-    updated.setFullYear(selected.getFullYear(), selected.getMonth(), selected.getDate());
-    setStartDate(updated);
+  // On iOS the spinner is inline and stays open (a Done button closes it), so we
+  // never hide it from onChange — that's what made it snap shut mid-scroll.
+  // Android's picker is a dialog that dismisses itself, so we clear our flag.
+  function onChangeDate(event: DateTimePickerEvent, selected?: Date) {
+    if (event.type === 'dismissed') {
+      setShowDatePicker(false);
+      return;
+    }
+    if (selected) {
+      const updated = new Date(startDate);
+      updated.setFullYear(selected.getFullYear(), selected.getMonth(), selected.getDate());
+      setStartDate(updated);
+    }
+    if (Platform.OS !== 'ios') setShowDatePicker(false);
   }
 
-  function onValueChangeTime(_event: unknown, selected?: Date) {
-    setShowTimePicker(false);
-    if (!selected) return;
-    const updated = new Date(startDate);
-    updated.setHours(selected.getHours(), selected.getMinutes(), 0, 0);
-    setStartDate(updated);
+  function onChangeTime(event: DateTimePickerEvent, selected?: Date) {
+    if (event.type === 'dismissed') {
+      setShowTimePicker(false);
+      return;
+    }
+    if (selected) {
+      const updated = new Date(startDate);
+      updated.setHours(selected.getHours(), selected.getMinutes(), 0, 0);
+      setStartDate(updated);
+    }
+    if (Platform.OS !== 'ios') setShowTimePicker(false);
   }
 
   function selectSport(value: string) {
@@ -240,23 +253,35 @@ export default function PostGameScreen() {
       </View>
 
       {showDatePicker && (
-        <DateTimePicker
-          value={startDate}
-          mode="date"
-          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-          minimumDate={new Date()}
-          onValueChange={onValueChangeDate}
-          onDismiss={() => setShowDatePicker(false)}
-        />
+        <View>
+          <DateTimePicker
+            value={startDate}
+            mode="date"
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            minimumDate={new Date()}
+            onChange={onChangeDate}
+          />
+          {Platform.OS === 'ios' && (
+            <Pressable style={styles.pickerDone} onPress={() => setShowDatePicker(false)}>
+              <Text style={styles.pickerDoneText}>Done</Text>
+            </Pressable>
+          )}
+        </View>
       )}
       {showTimePicker && (
-        <DateTimePicker
-          value={startDate}
-          mode="time"
-          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-          onValueChange={onValueChangeTime}
-          onDismiss={() => setShowTimePicker(false)}
-        />
+        <View>
+          <DateTimePicker
+            value={startDate}
+            mode="time"
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            onChange={onChangeTime}
+          />
+          {Platform.OS === 'ios' && (
+            <Pressable style={styles.pickerDone} onPress={() => setShowTimePicker(false)}>
+              <Text style={styles.pickerDoneText}>Done</Text>
+            </Pressable>
+          )}
+        </View>
       )}
 
       <View style={styles.row}>
@@ -373,6 +398,8 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
   },
   dateButtonText: { fontFamily: fonts.body, fontSize: fontSizes.lg, color: colors.text },
+  pickerDone: { alignSelf: 'flex-end', paddingVertical: spacing.sm, paddingHorizontal: spacing.md },
+  pickerDoneText: { fontFamily: fonts.bodyBold, fontSize: fontSizes.md, color: colors.green },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   chip: {
     paddingHorizontal: spacing.md,
