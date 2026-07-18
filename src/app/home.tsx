@@ -11,8 +11,10 @@ import { RatingModal } from '@/components/games/rating-modal';
 import { FeedControls, type ViewMode, type SortKey, type SkillFilter } from '@/components/games/feed-controls';
 import { GamesMap } from '@/components/games/games-map';
 import { Logo } from '@/components/ui/logo';
-import { discoverGames, deleteGame, joinGame, leaveGame, getPendingRatings, rateGame } from '@/services/games';
+import { NotificationBell } from '@/components/notifications/notification-bell';
+import { discoverGames, deleteGame, joinGame, leaveGame, rateGame } from '@/services/games';
 import { useSession } from '@/contexts/session-context';
+import { useNotifications } from '@/contexts/notifications-context';
 import { activeCount } from '@/utils/games';
 import { distanceKm } from '@/utils/geo';
 import { colors, fonts, fontSizes, radii, spacing } from '@/constants/theme';
@@ -20,6 +22,9 @@ import type { Game } from '@/types/game';
 
 export default function HomeScreen() {
   const { user, logout } = useSession();
+  // The rating queue lives in the notification centre so "Later" parks the
+  // prompt as a notification instead of losing it until the next app launch.
+  const { promptRating, dismissRating, clearRating } = useNotifications();
   const [games, setGames] = useState<Game[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -40,8 +45,6 @@ export default function HomeScreen() {
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [distanceNote, setDistanceNote] = useState<string | null>(null);
 
-  // Completed games the user still owes ratings for — shown one at a time.
-  const [pendingRatings, setPendingRatings] = useState<Game[]>([]);
   const [ratingBusy, setRatingBusy] = useState(false);
 
   const loadGames = useCallback(() => {
@@ -49,12 +52,11 @@ export default function HomeScreen() {
   }, []);
 
   async function handleRateSubmit(ratings: { user: string; value: 'up' | 'down' }[]) {
-    const current = pendingRatings[0];
-    if (!current) return;
+    if (!promptRating) return;
     setRatingBusy(true);
     try {
-      await rateGame(current.id, ratings);
-      setPendingRatings((prev) => prev.slice(1));
+      await rateGame(promptRating.id, ratings);
+      clearRating(promptRating.id);
     } catch {
       // Leave it in the queue to try again later.
     } finally {
@@ -119,12 +121,6 @@ export default function HomeScreen() {
       loadGames().finally(() => {
         if (active) setIsLoading(false);
       });
-      // Prompt for any completed games the user still needs to rate.
-      getPendingRatings()
-        .then((g) => {
-          if (active) setPendingRatings(g);
-        })
-        .catch(() => {});
       return () => {
         active = false;
       };
@@ -192,6 +188,7 @@ export default function HomeScreen() {
         </View>
 
         <View style={styles.headerActions}>
+          <NotificationBell />
           <Pressable style={styles.avatar} onPress={() => setShowAccountMenu(true)}>
             <Text style={styles.avatarText}>{initial}</Text>
           </Pressable>
@@ -273,11 +270,11 @@ export default function HomeScreen() {
       />
 
       <RatingModal
-        game={pendingRatings[0] ?? null}
+        game={promptRating}
         currentUserId={user?.id}
         busy={ratingBusy}
         onSubmit={handleRateSubmit}
-        onClose={() => setPendingRatings([])}
+        onClose={() => promptRating && dismissRating(promptRating.id)}
       />
 
       <ConfirmModal
