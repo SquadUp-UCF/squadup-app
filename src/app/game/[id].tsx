@@ -36,6 +36,7 @@ import { ConfirmModal } from '@/components/games/confirm-modal';
 import { RatingModal } from '@/components/games/rating-modal';
 import { useSession } from '@/contexts/session-context';
 import { useSavedGames } from '@/contexts/saved-games-context';
+import { useNotifications } from '@/contexts/notifications-context';
 import { positionsForSport } from '@/constants/positions';
 import { activeCount, isLive, statusMeta } from '@/utils/games';
 import { formatGameDateTime } from '@/utils/format';
@@ -49,6 +50,10 @@ export default function GameDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useSession();
   const { isSaved, toggleSaved } = useSavedGames();
+  // Finishing a game prompts for ratings here, but the queue itself lives in
+  // the notification centre — so "Later" parks it there instead of being
+  // forgotten, and a submitted rating clears it everywhere at once.
+  const { refresh: refreshNotifications, dismissRating, clearRating } = useNotifications();
   const insets = useSafeAreaInsets();
 
   const [game, setGame] = useState<Game | null>(null);
@@ -193,6 +198,10 @@ export default function GameDetailScreen() {
       setGame(updated);
       // Prompt the host to rate the other players right away.
       setRatingGame(updated);
+      // Pick the freshly completed game up as a pending rating now, so
+      // dismissing the prompt leaves a notification behind rather than
+      // waiting on the next poll.
+      refreshNotifications().catch(() => {});
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Could not finish the game');
     } finally {
@@ -205,6 +214,7 @@ export default function GameDetailScreen() {
     setRatingBusy(true);
     try {
       await rateGame(ratingGame.id, ratings);
+      clearRating(ratingGame.id);
       setRatingGame(null);
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Could not submit ratings');
@@ -453,7 +463,10 @@ export default function GameDetailScreen() {
         currentUserId={user?.id}
         busy={ratingBusy}
         onSubmit={handleSubmitRatings}
-        onClose={() => setRatingGame(null)}
+        onClose={() => {
+          if (ratingGame) dismissRating(ratingGame.id);
+          setRatingGame(null);
+        }}
       />
     </ScrollView>
   );
