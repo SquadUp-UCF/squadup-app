@@ -198,9 +198,11 @@ export default function GameDetailScreen() {
           <Text style={[styles.heroStatusText, { color: meta.color }]}>{live ? 'LIVE' : meta.label}</Text>
         </View>
         <View style={[styles.heroActions, { top: insets.top + spacing.sm }]}>
-          <Pressable style={styles.heroBtn} onPress={() => toggleSaved(game.id)}>
-            <Feather name="heart" size={18} color={saved ? colors.fillingUp : colors.text} />
-          </Pressable>
+          {!isHost && (
+            <Pressable style={styles.heroBtn} onPress={() => toggleSaved(game.id)}>
+              <Feather name="heart" size={18} color={saved ? colors.fillingUp : colors.text} />
+            </Pressable>
+          )}
           <Pressable style={styles.heroBtn} onPress={() => router.back()}>
             <Feather name="x" size={18} color={colors.text} />
           </Pressable>
