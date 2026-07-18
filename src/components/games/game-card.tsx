@@ -1,12 +1,12 @@
 // game cards — mirrors squadup-front's PostsList.jsx GameCard: banner, status
 // badges, join-progress bar, and join/leave or host edit/delete actions.
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import type { Game } from '@/types/game';
 import { formatGameDateTime } from '@/utils/format';
-import { activeCount, hasCustomBanner, isLive, isNew, statusMeta } from '@/utils/games';
+import { activeCount, isLive, isNew, statusMeta } from '@/utils/games';
 import { SportIcon, sportLabel } from '@/components/ui/sport-icon';
+import { GameBanner } from '@/components/games/game-banner';
 import { Badge } from '@/components/ui/badge';
 import { useSavedGames } from '@/contexts/saved-games-context';
 import { colors, fonts, fontSizes, radii, spacing } from '@/constants/theme';
@@ -50,21 +50,10 @@ export function GameCard({
   const joinable =
     !isHost && !alreadyIn && game.status !== 'locked' && game.status !== 'completed' && game.status !== 'cancelled';
 
-  const customBanner = hasCustomBanner(game);
-
   return (
     <Pressable style={styles.card} onPress={onPress}>
       <View style={styles.banner}>
-        {customBanner ? (
-          <Image source={{ uri: game.photo_url }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-        ) : (
-          <LinearGradient colors={['#2F8F4E', '#1F6B3E']} style={StyleSheet.absoluteFill} />
-        )}
-        {!customBanner && (
-          <View style={styles.bannerIcon}>
-            <SportIcon sport={game.sport} size={64} color="rgba(255,255,255,0.55)" />
-          </View>
-        )}
+        <GameBanner sport={game.sport} photoUrl={game.photo_url} iconSize={64} style={StyleSheet.absoluteFill} />
 
         <View style={styles.badgesLeft}>
           {live ? (
