@@ -22,7 +22,9 @@ function normalizeGame(raw: Record<string, any>): Game {
     status: raw.status ?? 'open',
     participants: (raw.participants ?? []).map(
       (p: Record<string, any>): Participant => ({
-        user: String(p.user ?? ''),
+        user: p.user != null ? String(p.user) : undefined,
+        name: p.name,
+        position: p.position,
         status: p.status,
         joined_at: p.joined_at,
         party_size: p.party_size,
@@ -63,6 +65,13 @@ export type GameInput = {
   min_players: number;
   max_players: number;
   photo_url?: string;
+  // Optional extras the create form now collects.
+  latitude?: number;
+  longitude?: number;
+  skill_level?: 'all' | 'beginner' | 'intermediate' | 'pro';
+  // Initial guest players (name + optional position) and the host's own position.
+  players?: { name: string; position?: string }[];
+  host_position?: string;
 };
 
 // Only http(s) banner URLs are meaningful to the API; a local file/content URI
@@ -84,9 +93,12 @@ export async function createGame(input: GameInput, _hostId: string): Promise<Gam
       start_time: input.start_time,
       min_players: input.min_players,
       max_players: input.max_players,
-      latitude: UCF.latitude,
-      longitude: UCF.longitude,
+      latitude: input.latitude ?? UCF.latitude,
+      longitude: input.longitude ?? UCF.longitude,
+      skill_level: input.skill_level,
       photo_url: remoteBanner(input.photo_url),
+      players: input.players && input.players.length > 0 ? input.players : undefined,
+      host_position: input.host_position || undefined,
     },
   });
   return normalizeGame(raw);
@@ -102,8 +114,37 @@ export async function updateGame(id: string, input: GameInput): Promise<Game> {
       start_time: input.start_time,
       min_players: input.min_players,
       max_players: input.max_players,
+      latitude: input.latitude,
+      longitude: input.longitude,
+      skill_level: input.skill_level,
       photo_url: remoteBanner(input.photo_url),
     },
+  });
+  return normalizeGame(raw);
+}
+
+/** Host-only: add a guest player (name + optional position) to the roster. */
+export async function addGuest(id: string, guest: { name: string; position?: string }): Promise<Game> {
+  const raw = await apiFetch<Record<string, any>>(`/games/${id}/guests`, {
+    method: 'POST',
+    body: guest,
+  });
+  return normalizeGame(raw);
+}
+
+/** Host-only: remove the guest at `index` in the participants array. */
+export async function removeGuest(id: string, index: number): Promise<Game> {
+  const raw = await apiFetch<Record<string, any>>(`/games/${id}/guests/${index}`, {
+    method: 'DELETE',
+  });
+  return normalizeGame(raw);
+}
+
+/** Set (or clear, with an empty string) the caller's own position on a game. */
+export async function setMyPosition(id: string, position: string): Promise<Game> {
+  const raw = await apiFetch<Record<string, any>>(`/games/${id}/position`, {
+    method: 'PATCH',
+    body: { position },
   });
   return normalizeGame(raw);
 }

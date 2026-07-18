@@ -1,24 +1,45 @@
-// Pop up screen for creating/editing game listings
+// Create / edit a game. Collects sport, a map pin, time, roster size, target
+// skill level, the host's own position, and (on create) initial guest players.
 import { useEffect, useState } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, Text, View, Platform } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, Platform } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { TextField } from '@/components/ui/text-field';
 import { SportPicker } from '@/components/ui/sport-picker';
-import { SportIcon, availableSports } from '@/components/ui/sport-icon';
+import { availableSports } from '@/components/ui/sport-icon';
 import { PrimaryButton } from '@/components/ui/primary-button';
+import { GameBanner } from '@/components/games/game-banner';
+import { LocationMapPicker, type Coordinate } from '@/components/ui/location-map-picker';
 import { createGame, getGame, updateGame } from '@/services/games';
+import { positionsForSport } from '@/constants/positions';
 import { isFutureDate } from '@/utils/validation';
 import { hasCustomBanner } from '@/utils/games';
 import { useSession } from '@/contexts/session-context';
 import { colors, fonts, fontSizes, radii, spacing } from '@/constants/theme';
 
+// UCF main campus — where the map opens and the default pin sits until moved.
+const UCF_CAMPUS: Coordinate = { latitude: 28.6024, longitude: -81.2001 };
+
+const SKILLS: { value: 'all' | 'beginner' | 'intermediate' | 'pro'; label: string }[] = [
+  { value: 'all', label: 'Everyone' },
+  { value: 'beginner', label: 'Beginner' },
+  { value: 'intermediate', label: 'Intermediate' },
+  { value: 'pro', label: 'Pro' },
+];
+
 function defaultStartTime(): Date {
   const date = new Date();
   date.setHours(date.getHours() + 1, 0, 0, 0);
   return date;
+}
+
+function Chip({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
+  return (
+    <Pressable style={[styles.chip, selected && styles.chipSelected]} onPress={onPress}>
+      <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{label}</Text>
+    </Pressable>
+  );
 }
 
 export default function PostGameScreen() {
@@ -32,11 +53,17 @@ export default function PostGameScreen() {
   const [showOther, setShowOther] = useState(false);
   const [location, setLocation] = useState('');
   const [description, setDescription] = useState('');
+  const [coordinate, setCoordinate] = useState<Coordinate>(UCF_CAMPUS);
   const [startDate, setStartDate] = useState<Date>(defaultStartTime);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [minPlayers, setMinPlayers] = useState('2');
   const [maxPlayers, setMaxPlayers] = useState('10');
+  const [skillLevel, setSkillLevel] = useState<'all' | 'beginner' | 'intermediate' | 'pro'>('all');
+  const [hostPosition, setHostPosition] = useState('');
+  const [players, setPlayers] = useState<{ name: string; position?: string }[]>([]);
+  const [playerName, setPlayerName] = useState('');
+  const [playerPosition, setPlayerPosition] = useState('');
   const [bannerUri, setBannerUri] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -54,6 +81,10 @@ export default function PostGameScreen() {
       setStartDate(new Date(game.start_time));
       setMinPlayers(String(game.min_players));
       setMaxPlayers(String(game.max_players));
+      setSkillLevel((game.skill_level as typeof skillLevel) ?? 'all');
+      if (game.latitude != null && game.longitude != null) {
+        setCoordinate({ latitude: game.latitude, longitude: game.longitude });
+      }
       if (hasCustomBanner(game)) setBannerUri(game.photo_url);
       setLoadingExisting(false);
     });
@@ -95,9 +126,27 @@ export default function PostGameScreen() {
   function selectSport(value: string) {
     setSport(value);
     setShowOther(false);
+    // Positions are sport-specific — clear any pending picks.
+    setHostPosition('');
+    setPlayerPosition('');
   }
 
   const effectiveSport = showOther ? customSport : sport;
+  const sportPositions = positionsForSport(showOther ? '' : sport);
+  // Show the picked image, else the sport's stock banner as a preview.
+  const bannerPhoto = bannerUri ?? (sport && !showOther ? `/sports/${sport}.jpg` : null);
+
+  function addPlayer() {
+    const name = playerName.trim();
+    if (!name) return;
+    setPlayers((prev) => [...prev, { name, position: playerPosition || undefined }]);
+    setPlayerName('');
+    setPlayerPosition('');
+  }
+
+  function removePlayer(index: number) {
+    setPlayers((prev) => prev.filter((_, i) => i !== index));
+  }
 
   async function handleSubmit() {
     setError('');
@@ -121,6 +170,10 @@ export default function PostGameScreen() {
       setError('Check your min/max player counts');
       return;
     }
+    if (!isEdit && 1 + players.length > max) {
+      setError(`Too many players for a max roster of ${max}.`);
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -131,12 +184,22 @@ export default function PostGameScreen() {
         start_time: startDate.toISOString(),
         min_players: min,
         max_players: max,
+        latitude: coordinate.latitude,
+        longitude: coordinate.longitude,
+        skill_level: skillLevel,
         photo_url: bannerUri || undefined,
       };
       if (isEdit && gameId) {
         await updateGame(gameId, input);
       } else {
-        await createGame(input, user?.id ?? '');
+        await createGame(
+          {
+            ...input,
+            players: players.length > 0 ? players : undefined,
+            host_position: hostPosition || undefined,
+          },
+          user?.id ?? '',
+        );
       }
       router.back();
     } catch (err) {
@@ -151,12 +214,7 @@ export default function PostGameScreen() {
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Pressable style={styles.banner} onPress={handlePickBanner}>
-        {bannerUri ? (
-          <Image source={{ uri: bannerUri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-        ) : (
-          <LinearGradient colors={['#2F8F4E', '#1F6B3E']} style={StyleSheet.absoluteFill} />
-        )}
-        {!bannerUri && <SportIcon sport={effectiveSport} size={48} color="rgba(255,255,255,0.55)" />}
+        <GameBanner sport={effectiveSport} photoUrl={bannerPhoto} iconSize={48} style={StyleSheet.absoluteFill} />
         <View style={styles.bannerPrompt}>
           <Text style={styles.bannerPromptText}>{bannerUri ? 'Change image' : 'Upload an image'}</Text>
         </View>
@@ -178,6 +236,9 @@ export default function PostGameScreen() {
       )}
 
       <TextField label="Location" value={location} onChangeText={setLocation} placeholder="e.g. RWC Courts, UCF" />
+
+      <Text style={styles.label}>Pin the spot</Text>
+      <LocationMapPicker value={coordinate} onChange={setCoordinate} />
 
       <TextField
         label="Description (optional)"
@@ -231,6 +292,72 @@ export default function PostGameScreen() {
         </View>
       </View>
 
+      <Text style={styles.label}>Skill level</Text>
+      <View style={styles.chipRow}>
+        {SKILLS.map((s) => (
+          <Chip key={s.value} label={s.label} selected={skillLevel === s.value} onPress={() => setSkillLevel(s.value)} />
+        ))}
+      </View>
+
+      {!isEdit && sportPositions.length > 0 && (
+        <>
+          <Text style={styles.label}>Your position (optional)</Text>
+          <View style={styles.chipRow}>
+            {sportPositions.map((p) => (
+              <Chip
+                key={p}
+                label={p}
+                selected={hostPosition === p}
+                onPress={() => setHostPosition(hostPosition === p ? '' : p)}
+              />
+            ))}
+          </View>
+        </>
+      )}
+
+      {!isEdit && (
+        <>
+          <Text style={styles.label}>Add players (optional)</Text>
+          <Text style={styles.subtle}>Pre-add people who are coming — they don’t need an account.</Text>
+          <TextInput
+            style={styles.playerInput}
+            value={playerName}
+            onChangeText={setPlayerName}
+            placeholder="Player name"
+            placeholderTextColor={colors.muted}
+            autoCapitalize="words"
+            returnKeyType="done"
+            onSubmitEditing={addPlayer}
+          />
+          {sportPositions.length > 0 && (
+            <View style={styles.chipRow}>
+              {sportPositions.map((p) => (
+                <Chip
+                  key={p}
+                  label={p}
+                  selected={playerPosition === p}
+                  onPress={() => setPlayerPosition(playerPosition === p ? '' : p)}
+                />
+              ))}
+            </View>
+          )}
+          <Pressable style={styles.addPlayerBtn} onPress={addPlayer}>
+            <Text style={styles.addPlayerBtnText}>Add player</Text>
+          </Pressable>
+          {players.map((player, index) => (
+            <View key={`${player.name}-${index}`} style={styles.playerRow}>
+              <Text style={styles.playerName}>
+                {player.name}
+                {player.position ? <Text style={styles.playerPos}>{`  ·  ${player.position}`}</Text> : null}
+              </Text>
+              <Pressable onPress={() => removePlayer(index)} hitSlop={8}>
+                <Text style={styles.removeText}>Remove</Text>
+              </Pressable>
+            </View>
+          ))}
+        </>
+      )}
+
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
       <PrimaryButton label={isEdit ? 'Save changes' : 'Post a game'} loading={isSubmitting} onPress={handleSubmit} />
@@ -251,6 +378,7 @@ const styles = StyleSheet.create({
   bannerPrompt: { position: 'absolute', bottom: spacing.sm, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.4)', paddingHorizontal: spacing.md, paddingVertical: 4, borderRadius: radii.pill },
   bannerPromptText: { color: colors.white, fontFamily: fonts.bodyMedium, fontSize: fontSizes.xs },
   label: { fontFamily: fonts.headingBold, fontSize: fontSizes.xs, textTransform: 'uppercase', letterSpacing: 0.6, color: colors.muted },
+  subtle: { fontFamily: fonts.body, fontSize: fontSizes.xs, color: colors.muted, marginTop: -spacing.xs },
   otherChip: {
     alignSelf: 'flex-start',
     paddingVertical: spacing.sm,
@@ -275,6 +403,51 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
   },
   dateButtonText: { fontFamily: fonts.body, fontSize: fontSizes.lg, color: colors.text },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  chip: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.pill,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  chipSelected: { backgroundColor: colors.green, borderColor: colors.green },
+  chipText: { fontFamily: fonts.bodyMedium, fontSize: fontSizes.sm, color: colors.text },
+  chipTextSelected: { color: colors.white, fontFamily: fonts.bodyBold },
+  playerInput: {
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    fontFamily: fonts.body,
+    fontSize: fontSizes.lg,
+    color: colors.text,
+  },
+  addPlayerBtn: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.surface,
+    borderWidth: 1.5,
+    borderColor: colors.green,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+  },
+  addPlayerBtnText: { fontFamily: fonts.bodyBold, fontSize: fontSizes.sm, color: colors.green },
+  playerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
+  },
+  playerName: { fontFamily: fonts.bodyMedium, fontSize: fontSizes.md, color: colors.text },
+  playerPos: { fontFamily: fonts.bodyBold, color: colors.green },
+  removeText: { fontFamily: fonts.bodyBold, fontSize: fontSizes.sm, color: colors.statusCancelled.color },
   error: {
     fontFamily: fonts.body,
     fontSize: fontSizes.md,

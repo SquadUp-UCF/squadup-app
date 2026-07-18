@@ -1,6 +1,7 @@
-// mock api components
 export type Participant = {
-  user: string; // user id
+  user?: string; // user id (absent for guest players the host pre-added)
+  name?: string; // guest display name (absent for registered players)
+  position?: string; // optional sport-specific position
   status: 'joined' | 'cancelled';
   joined_at: string;
   party_size?: number; // one account can RSVP for a group; defaults to 1
