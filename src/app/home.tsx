@@ -1,14 +1,19 @@
 // main feed
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { FlatList, Modal, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
+import * as Location from 'expo-location';
 import { GameCard } from '@/components/games/game-card';
 import { ConfirmModal } from '@/components/games/confirm-modal';
 import { JoinPartySizeModal } from '@/components/games/join-party-size-modal';
+import { FeedControls, type ViewMode, type SortKey, type SkillFilter } from '@/components/games/feed-controls';
+import { GamesMap } from '@/components/games/games-map';
 import { Logo } from '@/components/ui/logo';
 import { discoverGames, deleteGame, joinGame, leaveGame } from '@/services/games';
 import { useSession } from '@/contexts/session-context';
+import { activeCount } from '@/utils/games';
+import { distanceKm } from '@/utils/geo';
 import { colors, fonts, fontSizes, radii, spacing } from '@/constants/theme';
 import type { Game } from '@/types/game';
 
@@ -26,9 +31,60 @@ export default function HomeScreen() {
   const [joinError, setJoinError] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<Game | null>(null);
 
+  // View toggle + filters + sort (applied client-side over the fetched list).
+  const [viewMode, setViewMode] = useState<ViewMode>('feed');
+  const [sportFilter, setSportFilter] = useState(''); // '' = all sports
+  const [skillFilter, setSkillFilter] = useState<SkillFilter | null>(null);
+  const [sortBy, setSortBy] = useState<SortKey>('recent');
+  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [distanceNote, setDistanceNote] = useState<string | null>(null);
+
   const loadGames = useCallback(() => {
     return discoverGames().then((data) => setGames(data));
   }, []);
+
+  async function ensureLocation() {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        setDistanceNote('Location is off — turn it on to sort by distance.');
+        return;
+      }
+      const pos = await Location.getCurrentPositionAsync({});
+      setDistanceNote(null);
+      setUserLocation({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+    } catch {
+      setDistanceNote('Could not get your location.');
+    }
+  }
+
+  function handleSort(next: SortKey) {
+    setSortBy(next);
+    if (next === 'distance' && !userLocation) ensureLocation();
+  }
+
+  const visibleGames = useMemo(() => {
+    let list = games;
+    if (sportFilter) list = list.filter((g) => g.sport === sportFilter);
+    if (skillFilter !== null) list = list.filter((g) => (g.skill_level ?? 'all') === skillFilter);
+
+    const sorted = [...list];
+    if (sortBy === 'players') {
+      sorted.sort((a, b) => activeCount(b) - activeCount(a));
+    } else if (sortBy === 'distance' && userLocation) {
+      const dist = (g: Game) =>
+        g.latitude != null && g.longitude != null
+          ? distanceKm(userLocation, { latitude: g.latitude, longitude: g.longitude })
+          : Infinity;
+      sorted.sort((a, b) => dist(a) - dist(b));
+    } else {
+      const recency = (g: Game) => new Date(g.createdAt ?? g.start_time).getTime();
+      sorted.sort((a, b) => recency(b) - recency(a));
+    }
+    return sorted;
+  }, [games, sportFilter, skillFilter, sortBy, userLocation]);
+
+  const hasFilters = sportFilter !== '' || skillFilter !== null;
 
   // Re-runs every time this screen comes back into focus (not just on first
   // mount) — so returning from Post Game picks up the newly created game.
@@ -118,38 +174,56 @@ export default function HomeScreen() {
         <Text style={styles.heroSubtitle}>Tap a game to join, or post your own.</Text>
       </View>
 
-      {isLoading ? (
-        <Text style={styles.loading}>Loading games…</Text>
-      ) : games.length === 0 ? (
-        <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>No games yet</Text>
-          <Text style={styles.emptySub}>{'Be the first — hit "Post a game" to host one.'}</Text>
-        </View>
-      ) : (
-        <FlatList
-          data={games}
-          keyExtractor={(game) => game.id}
-          renderItem={({ item }) => (
-            <GameCard
-              game={item}
-              currentUserId={user?.id}
-              onPress={() => router.push(`/game/${item.id}`)}
-              onJoin={(game) => {
-                setJoinError('');
-                setJoinTarget(game);
-              }}
-              joiningId={joiningId}
-              onLeave={handleLeave}
-              leavingId={leavingId}
-              onEdit={(game) => router.push({ pathname: '/post-game', params: { gameId: game.id } })}
-              onDelete={setConfirmDelete}
-              deletingId={deletingId}
-            />
-          )}
-          contentContainerStyle={styles.list}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.green} />}
-        />
-      )}
+      <FeedControls
+        viewMode={viewMode}
+        onViewMode={setViewMode}
+        sport={sportFilter}
+        onSport={setSportFilter}
+        skill={skillFilter}
+        onSkill={setSkillFilter}
+        sort={sortBy}
+        onSort={handleSort}
+        distanceNote={distanceNote}
+      />
+
+      <View style={styles.content}>
+        {isLoading ? (
+          <Text style={styles.loading}>Loading games…</Text>
+        ) : viewMode === 'map' ? (
+          <GamesMap games={visibleGames} onSelect={(id) => router.push(`/game/${id}`)} />
+        ) : visibleGames.length === 0 ? (
+          <View style={styles.empty}>
+            <Text style={styles.emptyTitle}>{hasFilters ? 'No games match your filters' : 'No games yet'}</Text>
+            <Text style={styles.emptySub}>
+              {hasFilters ? 'Try widening your filters.' : 'Be the first — hit "Post a game" to host one.'}
+            </Text>
+          </View>
+        ) : (
+          <FlatList
+            data={visibleGames}
+            keyExtractor={(game) => game.id}
+            renderItem={({ item }) => (
+              <GameCard
+                game={item}
+                currentUserId={user?.id}
+                onPress={() => router.push(`/game/${item.id}`)}
+                onJoin={(game) => {
+                  setJoinError('');
+                  setJoinTarget(game);
+                }}
+                joiningId={joiningId}
+                onLeave={handleLeave}
+                leavingId={leavingId}
+                onEdit={(game) => router.push({ pathname: '/post-game', params: { gameId: game.id } })}
+                onDelete={setConfirmDelete}
+                deletingId={deletingId}
+              />
+            )}
+            contentContainerStyle={styles.list}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.green} />}
+          />
+        )}
+      </View>
 
       <JoinPartySizeModal
         game={joinTarget}
@@ -232,6 +306,7 @@ const styles = StyleSheet.create({
   liveBadgeText: { color: colors.greenAccent, fontFamily: fonts.bodyBold, fontSize: fontSizes.xs },
   heroTitle: { color: colors.white, fontFamily: fonts.heading, fontSize: fontSizes.xxl },
   heroSubtitle: { color: colors.greenAccent, fontFamily: fonts.body, fontSize: fontSizes.md },
+  content: { flex: 1, marginTop: spacing.sm },
   loading: { marginTop: 40, textAlign: 'center', fontFamily: fonts.body, color: colors.muted },
   empty: { alignItems: 'center', marginTop: 60, gap: 4, paddingHorizontal: spacing.xl },
   emptyTitle: { fontFamily: fonts.headingBold, fontSize: fontSizes.lg, color: colors.text },
