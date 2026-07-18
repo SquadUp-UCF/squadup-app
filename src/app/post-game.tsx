@@ -1,7 +1,7 @@
 // Create / edit a game. Collects sport, a map pin, time, roster size, target
 // skill level, the host's own position, and (on create) initial guest players.
-import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, Platform } from 'react-native';
+import { useEffect, useState, type ReactNode } from 'react';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View, Platform } from 'react-native';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { TextField } from '@/components/ui/text-field';
@@ -38,6 +38,34 @@ function Chip({ label, selected, onPress }: { label: string; selected: boolean; 
     <Pressable style={[styles.chip, selected && styles.chipSelected]} onPress={onPress}>
       <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{label}</Text>
     </Pressable>
+  );
+}
+
+// iOS bottom sheet that pins a reachable "Done" button above the inline spinner
+// picker (otherwise Done sits wherever the form happens to scroll to).
+function PickerSheet({
+  visible,
+  onClose,
+  children,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.pickerModalWrap}>
+        <Pressable style={styles.pickerBackdrop} onPress={onClose} />
+        <View style={styles.pickerSheet}>
+          <View style={styles.pickerHeader}>
+            <Pressable onPress={onClose} hitSlop={8}>
+              <Text style={styles.pickerDoneText}>Done</Text>
+            </Pressable>
+          </View>
+          {children}
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -252,36 +280,36 @@ export default function PostGameScreen() {
         </Pressable>
       </View>
 
-      {showDatePicker && (
-        <View>
-          <DateTimePicker
-            value={startDate}
-            mode="date"
-            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-            minimumDate={new Date()}
-            onChange={onChangeDate}
-          />
-          {Platform.OS === 'ios' && (
-            <Pressable style={styles.pickerDone} onPress={() => setShowDatePicker(false)}>
-              <Text style={styles.pickerDoneText}>Done</Text>
-            </Pressable>
+      {Platform.OS === 'ios' ? (
+        <>
+          <PickerSheet visible={showDatePicker} onClose={() => setShowDatePicker(false)}>
+            <DateTimePicker
+              value={startDate}
+              mode="date"
+              display="spinner"
+              minimumDate={new Date()}
+              onChange={onChangeDate}
+            />
+          </PickerSheet>
+          <PickerSheet visible={showTimePicker} onClose={() => setShowTimePicker(false)}>
+            <DateTimePicker value={startDate} mode="time" display="spinner" onChange={onChangeTime} />
+          </PickerSheet>
+        </>
+      ) : (
+        <>
+          {showDatePicker && (
+            <DateTimePicker
+              value={startDate}
+              mode="date"
+              display="default"
+              minimumDate={new Date()}
+              onChange={onChangeDate}
+            />
           )}
-        </View>
-      )}
-      {showTimePicker && (
-        <View>
-          <DateTimePicker
-            value={startDate}
-            mode="time"
-            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-            onChange={onChangeTime}
-          />
-          {Platform.OS === 'ios' && (
-            <Pressable style={styles.pickerDone} onPress={() => setShowTimePicker(false)}>
-              <Text style={styles.pickerDoneText}>Done</Text>
-            </Pressable>
+          {showTimePicker && (
+            <DateTimePicker value={startDate} mode="time" display="default" onChange={onChangeTime} />
           )}
-        </View>
+        </>
       )}
 
       <View style={styles.row}>
@@ -398,7 +426,22 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
   },
   dateButtonText: { fontFamily: fonts.body, fontSize: fontSizes.lg, color: colors.text },
-  pickerDone: { alignSelf: 'flex-end', paddingVertical: spacing.sm, paddingHorizontal: spacing.md },
+  pickerModalWrap: { flex: 1, justifyContent: 'flex-end' },
+  pickerBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(13,43,24,0.35)' },
+  pickerSheet: {
+    backgroundColor: colors.white,
+    borderTopLeftRadius: radii.lg,
+    borderTopRightRadius: radii.lg,
+    paddingBottom: spacing.xl,
+  },
+  pickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
   pickerDoneText: { fontFamily: fonts.bodyBold, fontSize: fontSizes.md, color: colors.green },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   chip: {
