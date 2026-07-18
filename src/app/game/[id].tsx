@@ -23,12 +23,14 @@ import {
   addGuest,
   removeGuest,
   setMyPosition,
+  deleteGame,
 } from '@/services/games';
 import { getUser } from '@/services/users';
 import { SportIcon, sportLabel } from '@/components/ui/sport-icon';
 import { GameBanner } from '@/components/games/game-banner';
 import { Dropdown } from '@/components/ui/dropdown';
 import { JoinPartySizeModal } from '@/components/games/join-party-size-modal';
+import { ConfirmModal } from '@/components/games/confirm-modal';
 import { useSession } from '@/contexts/session-context';
 import { useSavedGames } from '@/contexts/saved-games-context';
 import { positionsForSport } from '@/constants/positions';
@@ -59,6 +61,8 @@ export default function GameDetailScreen() {
   const [guestPosition, setGuestPosition] = useState('');
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState('');
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -160,6 +164,20 @@ export default function GameDetailScreen() {
     }
   }
 
+  async function handleDelete() {
+    if (!game) return;
+    setDeleting(true);
+    try {
+      await deleteGame(game.id);
+      setConfirmingDelete(false);
+      router.back();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Could not delete game');
+      setDeleting(false);
+      setConfirmingDelete(false);
+    }
+  }
+
   async function toggleNotifications() {
     const next = !notifsEnabled;
     setNotifsEnabled(next);
@@ -239,6 +257,22 @@ export default function GameDetailScreen() {
           <Feather name={notifsEnabled ? 'bell' : 'bell-off'} size={16} color={colors.green} />
           <Text style={styles.notifBtnLabel}>{notifsEnabled ? 'Notifications on' : 'Enable notifications'}</Text>
         </Pressable>
+
+        {isHost && (
+          <View style={styles.hostActions}>
+            <Pressable
+              style={styles.hostBtn}
+              onPress={() => router.push({ pathname: '/post-game', params: { gameId: game.id } })}
+            >
+              <Feather name="edit-2" size={16} color={colors.green} />
+              <Text style={styles.hostBtnText}>Edit game</Text>
+            </Pressable>
+            <Pressable style={[styles.hostBtn, styles.hostBtnDanger]} onPress={() => setConfirmingDelete(true)}>
+              <Feather name="trash-2" size={16} color={colors.statusCancelled.color} />
+              <Text style={[styles.hostBtnText, styles.hostBtnTextDanger]}>Delete</Text>
+            </Pressable>
+          </View>
+        )}
 
         <View style={styles.roster}>
           <Text style={styles.rosterLabel}>Players ({roster_.length})</Text>
@@ -354,6 +388,17 @@ export default function GameDetailScreen() {
         onConfirm={handleJoinConfirmed}
         onClose={() => setJoinOpen(false)}
       />
+
+      <ConfirmModal
+        visible={confirmingDelete}
+        title="Delete this game?"
+        message={`Your ${sportLabel(game.sport)} game at ${game.location} will be permanently removed. This can't be undone.`}
+        confirmLabel="Delete"
+        danger
+        busy={deleting}
+        onConfirm={handleDelete}
+        onClose={() => setConfirmingDelete(false)}
+      />
     </ScrollView>
   );
 }
@@ -405,6 +450,20 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   notifBtnLabel: { fontFamily: fonts.bodyMedium, fontSize: fontSizes.sm, color: colors.green },
+  hostActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
+  hostBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1.5,
+    borderColor: colors.green,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  hostBtnDanger: { borderColor: colors.statusCancelled.color },
+  hostBtnText: { fontFamily: fonts.bodyBold, fontSize: fontSizes.sm, color: colors.green },
+  hostBtnTextDanger: { color: colors.statusCancelled.color },
   roster: { marginTop: spacing.md, gap: spacing.sm },
   rosterLabel: { fontFamily: fonts.headingBold, fontSize: fontSizes.xs, textTransform: 'uppercase', letterSpacing: 0.6, color: colors.muted },
   playerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
