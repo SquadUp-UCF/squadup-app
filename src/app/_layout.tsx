@@ -5,6 +5,7 @@ import { useFonts, DMSans_400Regular, DMSans_500Medium, DMSans_700Bold } from '@
 import { Outfit_700Bold, Outfit_800ExtraBold } from '@expo-google-fonts/outfit';
 import * as SplashScreen from 'expo-splash-screen';
 import { SessionProvider } from '@/contexts/session-context';
+import { SavedGamesProvider } from '@/contexts/saved-games-context';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -25,8 +26,9 @@ export default function RootLayout() {
 
   return (
     <SessionProvider>
-      <Stack>
-        <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+      <SavedGamesProvider>
+        <Stack>
+          <Stack.Screen name="(auth)" options={{ headerShown: false }} />
         <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="home" options={{ headerShown: false }} />
         <Stack.Screen
@@ -36,7 +38,8 @@ export default function RootLayout() {
         <Stack.Screen name="profile" options={{ presentation: 'modal', headerShown: false }} />
         <Stack.Screen name="change-password" options={{ title: 'Update Password' }} />
         <Stack.Screen name="game/[id]" options={{ headerShown: false }} />
-      </Stack>
+        </Stack>
+      </SavedGamesProvider>
     </SessionProvider>
   );
 }

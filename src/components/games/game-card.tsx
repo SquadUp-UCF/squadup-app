@@ -1,6 +1,5 @@
 // game cards — mirrors squadup-front's PostsList.jsx GameCard: banner, status
 // badges, join-progress bar, and join/leave or host edit/delete actions.
-import { useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
@@ -9,6 +8,7 @@ import { formatGameDateTime } from '@/utils/format';
 import { activeCount, hasCustomBanner, isLive, isNew, statusMeta } from '@/utils/games';
 import { SportIcon, sportLabel } from '@/components/ui/sport-icon';
 import { Badge } from '@/components/ui/badge';
+import { useSavedGames } from '@/contexts/saved-games-context';
 import { colors, fonts, fontSizes, radii, spacing } from '@/constants/theme';
 
 type GameCardProps = {
@@ -36,7 +36,8 @@ export function GameCard({
   onDelete,
   deletingId,
 }: GameCardProps) {
-  const [liked, setLiked] = useState(false);
+  const { isSaved, toggleSaved } = useSavedGames();
+  const liked = isSaved(game.id);
   const meta = statusMeta(game);
   const joined = activeCount(game);
   const live = isLive(game);
@@ -85,7 +86,7 @@ export function GameCard({
               </IconButton>
             </>
           ) : (
-            <IconButton onPress={() => setLiked((v) => !v)}>
+            <IconButton onPress={() => toggleSaved(game.id)}>
               <Feather name="heart" size={16} color={liked ? colors.fillingUp : '#666'} />
             </IconButton>
           )}

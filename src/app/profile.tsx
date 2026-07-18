@@ -8,7 +8,7 @@ import { TextField } from '@/components/ui/text-field';
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { SportIcon, availableSports, sportLabel } from '@/components/ui/sport-icon';
 import { SkillPickerModal } from '@/components/games/skill-picker-modal';
-import { updateProfile, uploadAvatar } from '@/services/users';
+import { updateProfile, uploadAvatar, getSavedGames } from '@/services/users';
 import { getMyGames } from '@/services/games';
 import { useSession } from '@/contexts/session-context';
 import { colors, fonts, fontSizes, radii, spacing } from '@/constants/theme';
@@ -31,6 +31,7 @@ export default function ProfileScreen() {
 
   const [joinedGames, setJoinedGames] = useState<Game[]>([]);
   const [createdGames, setCreatedGames] = useState<Game[]>([]);
+  const [savedGames, setSavedGames] = useState<Game[]>([]);
   // Derived from `gamesLoaded` rather than a separate boolean, so the effect
   // below never needs a synchronous setState call at the top of its body.
   const [gamesLoaded, setGamesLoaded] = useState(false);
@@ -38,9 +39,14 @@ export default function ProfileScreen() {
 
   useEffect(() => {
     if (activeTab !== 'games' || !user) return;
-    Promise.all([getMyGames(user.id, 'playing'), getMyGames(user.id, 'hosting')]).then(([playing, hosting]) => {
+    Promise.all([
+      getMyGames(user.id, 'playing'),
+      getMyGames(user.id, 'hosting'),
+      getSavedGames().catch(() => [] as Game[]),
+    ]).then(([playing, hosting, saved]) => {
       setJoinedGames(playing);
       setCreatedGames(hosting);
+      setSavedGames(saved);
       setGamesLoaded(true);
     });
   }, [activeTab, user]);
@@ -228,6 +234,9 @@ export default function ProfileScreen() {
 
           <Text style={styles.label}>Games created</Text>
           <GameStrip games={createdGames} loading={gamesLoading} emptyLabel="No games created yet." />
+
+          <Text style={styles.label}>Games saved</Text>
+          <GameStrip games={savedGames} loading={gamesLoading} emptyLabel="No saved games yet." />
         </View>
       )}
 

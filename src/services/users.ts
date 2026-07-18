@@ -5,7 +5,9 @@
 // `skill_levels`. This adapter maps between the two so screens are unchanged.
 import { apiFetch } from '@/lib/http';
 import { mediaUrl } from '@/lib/api-config';
+import { getGame } from './games';
 import type { UserProfile } from '@/types/user';
+import type { Game } from '@/types/game';
 
 // Map a serialized API user (/users/me carries `_id`; /users/:id carries `id`)
 // into the app's UserProfile.
@@ -62,6 +64,30 @@ export async function updateProfile(
   if (input.preferred_positions !== undefined) body.skill_levels = input.preferred_positions;
   const raw = await apiFetch<Record<string, any>>('/users/me', { method: 'PATCH', body });
   return toUserProfile(raw);
+}
+
+// The ids of games the user has bookmarked ("saved"), read from /users/me.
+export async function getSavedGameIds(): Promise<string[]> {
+  const raw = await apiFetch<Record<string, any>>('/users/me');
+  const saved = (raw.saved_games ?? []) as any[];
+  return saved.map((x) => String(x?._id ?? x?.$oid ?? x)).filter(Boolean);
+}
+
+// Full saved games. Resolves each id individually so it works whether or not
+// the API populates the saved-games list, and drops any that can't be loaded
+// (e.g. since deleted).
+export async function getSavedGames(): Promise<Game[]> {
+  const ids = await getSavedGameIds();
+  const games = await Promise.all(ids.map((id) => getGame(id)));
+  return games.filter((g): g is Game => g != null);
+}
+
+export function saveGame(gameId: string): Promise<void> {
+  return apiFetch<void>(`/users/me/saved-games/${gameId}`, { method: 'POST' });
+}
+
+export function unsaveGame(gameId: string): Promise<void> {
+  return apiFetch<void>(`/users/me/saved-games/${gameId}`, { method: 'DELETE' });
 }
 
 export async function uploadAvatar(_userId: string, uri: string | null): Promise<UserProfile> {
