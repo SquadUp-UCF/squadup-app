@@ -296,6 +296,14 @@ export default function GameDetailScreen() {
               {joined} / {game.max_players} players
             </Text>
           </View>
+          {/* The roster count alone doesn't say when the game actually happens
+              — min_players is the bar it has to clear to be confirmed. */}
+          <View style={styles.metaItem}>
+            <Feather name="target" size={15} color={colors.muted} />
+            <Text style={styles.metaText}>
+              Min {game.min_players} to confirm
+            </Text>
+          </View>
         </View>
 
         <Pressable style={styles.notifBtn} onPress={toggleNotifications}>
@@ -511,7 +519,14 @@ const styles = StyleSheet.create({
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.xs },
   title: { fontFamily: fonts.heading, fontSize: fontSizes.xxl, color: colors.text, flexShrink: 1 },
   description: { fontFamily: fonts.body, fontSize: fontSizes.md, color: colors.muted, lineHeight: 20 },
-  metaRow: { flexDirection: 'row', gap: spacing.xl, marginTop: spacing.xs },
+  // Wraps so a long date and the two counts don't overflow on narrow screens.
+  metaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    columnGap: spacing.xl,
+    rowGap: spacing.xs,
+    marginTop: spacing.xs,
+  },
   metaItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   metaText: { fontFamily: fonts.body, fontSize: fontSizes.sm, color: colors.muted },
   notifBtn: {
