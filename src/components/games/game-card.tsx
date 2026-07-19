@@ -42,6 +42,12 @@ export function GameCard({
   const joined = activeCount(game);
   const live = isLive(game);
   const ratio = game.max_players > 0 ? Math.min(1, joined / game.max_players) : 0;
+  // Where min_players sits on the same scale as the fill, so the bar shows how
+  // far the game is from going ahead — not just how full it is. Hidden when the
+  // minimum is the whole roster, where the marker would sit on the end cap and
+  // say nothing.
+  const minRatio = game.max_players > 0 ? game.min_players / game.max_players : 0;
+  const showMinMarker = minRatio > 0 && minRatio < 1;
   const fillingUp = ratio >= 0.8 && game.status !== 'locked' && game.status !== 'completed';
   const barColor = ratio >= 0.8 ? colors.fillingUp : '#2F8F4E';
 
@@ -96,20 +102,25 @@ export function GameCard({
         </View>
 
         <View style={styles.metaRow}>
-          <View style={styles.metaItem}>
+          <View style={[styles.metaItem, styles.metaItemShrink]}>
             <Feather name="clock" size={13} color={colors.muted} />
-            <Text style={styles.metaText}>{formatGameDateTime(game.start_time)}</Text>
+            <Text style={styles.metaText} numberOfLines={1}>
+              {formatGameDateTime(game.start_time)}
+            </Text>
           </View>
           <View style={styles.metaItem}>
             <Feather name="users" size={13} color={colors.muted} />
             <Text style={styles.metaText}>
-              {joined} / {game.max_players}
+              {joined} / {game.max_players} · min {game.min_players}
             </Text>
           </View>
         </View>
 
         <View style={styles.barTrack}>
           <View style={[styles.barFill, { width: `${ratio * 100}%`, backgroundColor: barColor }]} />
+          {showMinMarker && (
+            <View style={[styles.barMinMarker, { left: `${minRatio * 100}%` }]} />
+          )}
         </View>
 
         {!isHost && alreadyIn && (
@@ -193,11 +204,30 @@ const styles = StyleSheet.create({
   sportPillLabel: { fontFamily: fonts.bodyBold, fontSize: fontSizes.xs, textTransform: 'capitalize' },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   title: { fontFamily: fonts.headingBold, fontSize: fontSizes.lg, color: colors.text, flexShrink: 1 },
-  metaRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 2 },
+  metaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: 2,
+  },
   metaItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  // Only the date gives way when the row is too narrow — truncating the counts
+  // would defeat the point of showing them.
+  metaItemShrink: { flexShrink: 1 },
   metaText: { fontFamily: fonts.body, fontSize: fontSizes.sm, color: colors.muted },
   barTrack: { height: 5, borderRadius: 3, backgroundColor: '#eee', overflow: 'hidden', marginTop: 4 },
   barFill: { height: '100%', borderRadius: 3 },
+  // Notch on the track marking min_players. Sits above the fill and reads
+  // against both the filled and empty halves.
+  barMinMarker: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: 2,
+    marginLeft: -1,
+    backgroundColor: 'rgba(13, 43, 24, 0.45)',
+  },
   actionBtn: { marginTop: spacing.sm, borderRadius: radii.md, paddingVertical: 11, alignItems: 'center' },
   joinBtn: { backgroundColor: colors.green },
   joinBtnDisabled: { backgroundColor: '#E4E4E4' },
