@@ -6,18 +6,14 @@ import { useState } from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet, Switch } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { availableSports, sportLabel } from '@/components/ui/sport-icon';
+import { SKILL_LEVELS, type SkillLevel } from '@/constants/skills';
 import { colors, fonts, fontSizes, radii, spacing } from '@/constants/theme';
 
 export type ViewMode = 'feed' | 'map';
 export type SortKey = 'distance' | 'recent' | 'players';
-export type SkillFilter = 'all' | 'beginner' | 'intermediate' | 'pro';
-
-const SKILLS: { value: SkillFilter; label: string }[] = [
-  { value: 'all', label: 'Everyone' },
-  { value: 'beginner', label: 'Beginner' },
-  { value: 'intermediate', label: 'Intermediate' },
-  { value: 'pro', label: 'Pro' },
-];
+// The levels and their labels live in constants/skills, shared with the game
+// cards so a level can't be called one thing here and another there.
+export type SkillFilter = SkillLevel;
 
 const SORTS: { value: SortKey; label: string }[] = [
   { value: 'distance', label: 'Distance' },
@@ -131,7 +127,7 @@ export function FeedControls({
 
           <Text style={styles.group}>By Skill Level</Text>
           <View style={styles.wrapRow}>
-            {SKILLS.map((s) => (
+            {SKILL_LEVELS.map((s) => (
               <Chip
                 key={s.value}
                 label={s.label}

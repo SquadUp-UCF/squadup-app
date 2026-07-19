@@ -22,6 +22,16 @@ export const colors = {
   live: { bg: '#FDE6E6', color: '#C81E1E' },
   fillingUp: '#E4572E',
   new: { bg: '#E4F3E8', color: '#1F6B3E' },
+
+  // Skill level, as a difficulty gradient: green is easy going, red is serious.
+  // Deliberately their own entries rather than borrowed status colors — a game
+  // can be both `open` (green status) and `pro` (red skill), so the two scales
+  // have to be free to disagree. The text tones are dark rather than the pure
+  // hue so each clears WCAG AA against its own background; a literal yellow
+  // would be unreadable at this size.
+  skillBeginner: { bg: '#E4F3E8', color: '#1F6B3E' },
+  skillIntermediate: { bg: '#FBF0D0', color: '#7A5807' },
+  skillPro: { bg: '#F8DCDC', color: '#A81B1B' },
 } as const;
 
 export const fonts = {

@@ -6,6 +6,7 @@ import type { Game } from '@/types/game';
 import { formatGameDateTime } from '@/utils/format';
 import { activeCount, isLive, isNew, statusMeta } from '@/utils/games';
 import { SportIcon, sportLabel } from '@/components/ui/sport-icon';
+import { gameSkillBadge } from '@/constants/skills';
 import { GameBanner } from '@/components/games/game-banner';
 import { Badge } from '@/components/ui/badge';
 import { useSavedGames } from '@/contexts/saved-games-context';
@@ -51,6 +52,8 @@ export function GameCard({
   const fillingUp = ratio >= 0.8 && game.status !== 'locked' && game.status !== 'completed';
   const barColor = ratio >= 0.8 ? colors.fillingUp : '#2F8F4E';
 
+  const skill = gameSkillBadge(game.skill_level);
+
   const isHost = Boolean(currentUserId) && game.host === currentUserId;
   const alreadyIn = game.participants.some((p) => p.user === currentUserId && p.status === 'joined');
   const joinable =
@@ -89,9 +92,18 @@ export function GameCard({
       </View>
 
       <View style={styles.body}>
-        <View style={[styles.sportPill, { backgroundColor: meta.bg }]}>
-          <SportIcon sport={game.sport} size={14} color={meta.color} />
-          <Text style={[styles.sportPillLabel, { color: meta.color }]}>{sportLabel(game.sport)}</Text>
+        {/* Sport, then the skill level it's pitched at. Games open to everyone
+            show the sport alone — see gameSkillBadge. */}
+        <View style={styles.pillRow}>
+          <View style={[styles.sportPill, { backgroundColor: meta.bg }]}>
+            <SportIcon sport={game.sport} size={14} color={meta.color} />
+            <Text style={[styles.sportPillLabel, { color: meta.color }]}>{sportLabel(game.sport)}</Text>
+          </View>
+          {skill && (
+            <View style={[styles.skillPill, { backgroundColor: skill.bg }]}>
+              <Text style={[styles.skillPillLabel, { color: skill.color }]}>{skill.label}</Text>
+            </View>
+          )}
         </View>
 
         <View style={styles.titleRow}>
@@ -200,16 +212,28 @@ const styles = StyleSheet.create({
   },
   iconBtnDisabled: { opacity: 0.5 },
   body: { padding: spacing.md, gap: 6 },
+  // Wraps so a long sport + skill pair drops to a second line on a narrow
+  // screen rather than squeezing either pill.
+  pillRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 },
   sportPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    alignSelf: 'flex-start',
     paddingHorizontal: spacing.sm,
     paddingVertical: 3,
     borderRadius: radii.pill,
   },
   sportPillLabel: { fontFamily: fonts.bodyBold, fontSize: fontSizes.xs, textTransform: 'capitalize' },
+  // Tinted like the sport pill beside it, but by difficulty rather than status
+  // (colors.skill*). The two scales are independent, so an open game pitched at
+  // pros is a green pill next to a red one — that's the roster and the standard
+  // saying different things, which is the point.
+  skillPill: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    borderRadius: radii.pill,
+  },
+  skillPillLabel: { fontFamily: fonts.bodyBold, fontSize: fontSizes.xs },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   title: { fontFamily: fonts.headingBold, fontSize: fontSizes.lg, color: colors.text, flexShrink: 1 },
   metaRow: {
