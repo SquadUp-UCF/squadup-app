@@ -16,6 +16,11 @@ const ICONS: Record<NotificationType, IconSpec> = {
   game_starting_soon: { name: 'clock', color: colors.green, bg: colors.statusOpen.bg },
   player_joined: { name: 'user-plus', color: colors.green, bg: colors.statusOpen.bg },
   rate_teammates: { name: 'thumbs-up', color: colors.green, bg: colors.statusOpen.bg },
+  // Not rendered today — this client hides `game_completed` in favour of its
+  // own rate_teammates row (see HIDDEN_NOTIFICATION_TYPES). Kept so the map
+  // stays exhaustive over the API's types, and matching the web client's flag
+  // so the two don't drift if it's ever shown here.
+  game_completed: { name: 'flag', color: colors.muted, bg: colors.surface },
 };
 
 export function NotificationIcon({ type, size = 40 }: { type: NotificationType; size?: number }) {
