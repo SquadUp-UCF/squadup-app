@@ -29,3 +29,13 @@ export async function markNotificationRead(id: string): Promise<void> {
 export async function markAllNotificationsRead(): Promise<void> {
   await apiFetch<void>('/notifications/read-all', { method: 'PATCH' });
 }
+
+/** Remove one row from the history. Idempotent — deleting a gone row is fine. */
+export async function deleteNotification(id: string): Promise<void> {
+  await apiFetch<void>(`/notifications/${id}`, { method: 'DELETE' });
+}
+
+/** Empty the whole history. */
+export async function clearNotifications(): Promise<void> {
+  await apiFetch<void>('/notifications', { method: 'DELETE' });
+}

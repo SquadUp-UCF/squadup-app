@@ -2,11 +2,18 @@
 // Tapping a row opens the game it refers to, except "rate your teammates",
 // which opens the rating prompt in place so the rating can be finished from
 // here after the user tapped "Later" on it earlier.
-import { useCallback, useState } from 'react';
+//
+// Rows are removable: swipe one left to delete it, or empty the whole list from
+// the header. Deleting a rating row means "I'm not rating that game" — it drops
+// the prompt for good rather than parking it.
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
-import { router, useFocusEffect } from 'expo-router';
+import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
+import { Feather } from '@expo/vector-icons';
+import { Stack, router, useFocusEffect } from 'expo-router';
 import { NotificationIcon } from '@/components/notifications/notification-icon';
 import { RatingModal } from '@/components/games/rating-modal';
+import { ConfirmModal } from '@/components/games/confirm-modal';
 import { useNotifications } from '@/contexts/notifications-context';
 import { useSession } from '@/contexts/session-context';
 import { rateGame } from '@/services/games';
@@ -23,6 +30,8 @@ export default function NotificationsScreen() {
     refresh,
     markRead,
     markAllRead,
+    removeNotification,
+    clearAll,
     pendingRatings,
     clearRating,
   } = useNotifications();
@@ -30,17 +39,27 @@ export default function NotificationsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [ratingGame, setRatingGame] = useState<Game | null>(null);
   const [ratingBusy, setRatingBusy] = useState(false);
+  const [confirmingClear, setConfirmingClear] = useState(false);
+  const [clearing, setClearing] = useState(false);
+
+  // The focus effect must not re-subscribe when these change identity: its
+  // cleanup marks everything read, which updates the context, which would hand
+  // back new callbacks, which would re-run the effect — an endless refresh loop.
+  const actions = useRef({ refresh, markAllRead });
+  useEffect(() => {
+    actions.current = { refresh, markAllRead };
+  }, [refresh, markAllRead]);
 
   // Rows stay visibly unread while the screen is open — so the user can see
   // what's new as they scroll — and are cleared on the way out, which is what
   // drops the badge on the bell.
   useFocusEffect(
     useCallback(() => {
-      refresh().catch(() => {});
+      actions.current.refresh().catch(() => {});
       return () => {
-        markAllRead().catch(() => {});
+        actions.current.markAllRead().catch(() => {});
       };
-    }, [refresh, markAllRead]),
+    }, []),
   );
 
   async function handleRefresh() {
@@ -76,31 +95,76 @@ export default function NotificationsScreen() {
     }
   }
 
+  async function handleClearAll() {
+    setClearing(true);
+    try {
+      await clearAll();
+    } finally {
+      setClearing(false);
+      setConfirmingClear(false);
+    }
+  }
+
   function renderRow({ item }: { item: AppNotification }) {
     return (
-      <Pressable
-        style={({ pressed }) => [
-          styles.row,
-          !item.read && styles.rowUnread,
-          pressed && styles.rowPressed,
-        ]}
-        onPress={() => handlePress(item)}
+      <ReanimatedSwipeable
+        friction={2}
+        rightThreshold={40}
+        overshootRight={false}
+        containerStyle={styles.swipeContainer}
+        renderRightActions={() => (
+          <Pressable
+            style={styles.deleteAction}
+            onPress={() => removeNotification(item.id).catch(() => {})}
+            accessibilityRole="button"
+            accessibilityLabel={`Delete notification: ${item.title}`}
+          >
+            <Feather name="trash-2" size={18} color={colors.white} />
+            <Text style={styles.deleteActionLabel}>Delete</Text>
+          </Pressable>
+        )}
       >
-        <NotificationIcon type={item.type} />
-        <View style={styles.rowText}>
-          <Text style={styles.rowTitle}>{item.title}</Text>
-          <Text style={styles.rowBody}>{item.body}</Text>
-        </View>
-        <View style={styles.rowMeta}>
-          <Text style={styles.rowTime}>{formatRelativeTime(item.createdAt)}</Text>
-          {!item.read && <View style={styles.unreadDot} />}
-        </View>
-      </Pressable>
+        <Pressable
+          style={({ pressed }) => [
+            styles.row,
+            !item.read && styles.rowUnread,
+            pressed && styles.rowPressed,
+          ]}
+          onPress={() => handlePress(item)}
+        >
+          <NotificationIcon type={item.type} />
+          <View style={styles.rowText}>
+            <Text style={styles.rowTitle}>{item.title}</Text>
+            <Text style={styles.rowBody}>{item.body}</Text>
+          </View>
+          <View style={styles.rowMeta}>
+            <Text style={styles.rowTime}>{formatRelativeTime(item.createdAt)}</Text>
+            {!item.read && <View style={styles.unreadDot} />}
+          </View>
+        </Pressable>
+      </ReanimatedSwipeable>
     );
   }
 
   return (
     <View style={styles.container}>
+      <Stack.Screen
+        options={{
+          title: 'Notifications',
+          headerRight: () =>
+            notifications.length > 0 ? (
+              <Pressable
+                onPress={() => setConfirmingClear(true)}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Clear all notifications"
+              >
+                <Text style={styles.clearAction}>Clear all</Text>
+              </Pressable>
+            ) : null,
+        }}
+      />
+
       <FlatList
         data={notifications}
         keyExtractor={(item) => item.id}
@@ -124,6 +188,17 @@ export default function NotificationsScreen() {
         }
       />
 
+      <ConfirmModal
+        visible={confirmingClear}
+        title="Clear all notifications?"
+        message="Your notification history will be emptied. Any teammate ratings you haven't submitted will stop being asked for."
+        confirmLabel="Clear all"
+        danger
+        busy={clearing}
+        onConfirm={handleClearAll}
+        onClose={() => setConfirmingClear(false)}
+      />
+
       <RatingModal
         game={ratingGame}
         currentUserId={user?.id}
@@ -139,6 +214,18 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F9F4' },
   listContent: { padding: spacing.lg, gap: spacing.sm },
   emptyContent: { flexGrow: 1, justifyContent: 'center', padding: spacing.xl },
+  clearAction: { fontFamily: fonts.bodyBold, fontSize: fontSizes.sm, color: colors.green },
+  // The swipe container owns the row's rounded corners so the red action behind
+  // it is clipped to the same shape instead of squaring off the edge.
+  swipeContainer: { borderRadius: radii.lg, overflow: 'hidden' },
+  deleteAction: {
+    width: 88,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    backgroundColor: colors.statusCancelled.color,
+  },
+  deleteActionLabel: { fontFamily: fonts.bodyBold, fontSize: fontSizes.xs, color: colors.white },
   row: {
     flexDirection: 'row',
     alignItems: 'center',

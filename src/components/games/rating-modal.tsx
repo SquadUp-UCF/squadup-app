@@ -33,10 +33,13 @@ export function RatingModal({ game, currentUserId, busy = false, onSubmit, onClo
   const [names, setNames] = useState<Record<string, string>>({});
   const [ratings, setRatings] = useState<Record<string, Rating>>({});
 
-  // Reset choices and fetch display names whenever the game changes.
+  // Reset choices and fetch display names whenever the game changes. Keyed on
+  // the game's id, not the object: polling hands back a fresh Game every 30s,
+  // and reacting to that identity change would wipe the thumbs mid-selection.
+  const gameId = game?.id;
   useEffect(() => {
     setRatings({});
-    if (!game) return;
+    if (!gameId) return;
     let active = true;
     ratees.forEach((p) => {
       const uid = p.user as string;
@@ -48,7 +51,7 @@ export function RatingModal({ game, currentUserId, busy = false, onSubmit, onClo
       active = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [game]);
+  }, [gameId]);
 
   function setRating(user: string, value: Rating) {
     setRatings((prev) => (prev[user] === value ? (() => {

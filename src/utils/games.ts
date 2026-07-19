@@ -48,9 +48,28 @@ export function isActive(game: Game, now = Date.now()) {
   return start + LIVE_WINDOW_MS >= now;
 }
 
+/** Whether kickoff has passed — the API stops accepting new guests at that point. */
+export function hasStarted(game: Game, now = Date.now()) {
+  const start = new Date(game.start_time).getTime();
+  if (Number.isNaN(start)) return false;
+  return start <= now;
+}
+
 export function isNew(game: Game, now = Date.now()) {
   if (!game.createdAt) return false;
   return now - new Date(game.createdAt).getTime() < NEW_WINDOW_MS;
+}
+
+/**
+ * Whether `userId` has anyone they could actually rate on this game. Only
+ * joined, registered players other than the rater can be rated — a game played
+ * solo, or with guests only, has nobody, and prompting for one produces an
+ * empty dialog whose only real option is to back out of it.
+ */
+export function hasSomeoneToRate(game: Game, userId: string | undefined) {
+  return game.participants.some(
+    (p) => p.user && p.status === 'joined' && p.user !== userId,
+  );
 }
 
 // Sums party_size across joined participants — one account can RSVP for a

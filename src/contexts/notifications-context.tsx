@@ -11,6 +11,13 @@
 // The list is polled while the app is foregrounded, and anything that arrives
 // unread after the first load is pushed to the toast queue so it also surfaces
 // live over whatever screen the user is on.
+//
+// Rows can be removed as well as read. Server rows are deleted through the API.
+// A rating row has no server row to delete, so deleting one is recorded the only
+// way that sticks: as a rating submitted with no thumbs, which is exactly what
+// "I'm not rating this game" means and what the Submit button does when nothing
+// is chosen. That keeps the single-source-of-truth property above intact — no
+// local suppression list to keep in step, expire, or outgrow SecureStore.
 import {
   createContext,
   useCallback,
@@ -24,13 +31,16 @@ import {
 import { AppState, type AppStateStatus } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import {
+  clearNotifications,
+  deleteNotification,
   getNotifications,
   markAllNotificationsRead,
   markNotificationRead,
 } from '@/services/notifications';
-import { getPendingRatings } from '@/services/games';
+import { getPendingRatings, rateGame } from '@/services/games';
 import { sportLabel } from '@/components/ui/sport-icon';
 import { useSession } from '@/contexts/session-context';
+import { hasSomeoneToRate } from '@/utils/games';
 import { RATING_ID_PREFIX, type AppNotification } from '@/types/notification';
 import type { Game } from '@/types/game';
 
@@ -39,6 +49,8 @@ const POLL_INTERVAL_MS = 30_000;
 // tapping "Later" on the prompt or by opening the notification centre. Persisted
 // so the auto-prompt doesn't reappear on every app launch; the row itself stays
 // in the list (as read) until the rating is actually submitted.
+// It is pruned against what's still pending on every poll, which is what keeps
+// it well inside SecureStore's ~2KB practical ceiling.
 const DISMISSED_KEY = 'squadup_rating_dismissals';
 
 type NotificationsState = {
@@ -48,6 +60,10 @@ type NotificationsState = {
   refresh: () => Promise<void>;
   markRead: (id: string) => Promise<void>;
   markAllRead: () => Promise<void>;
+  /** Delete one row. Deleting a rating row means "not rating this game". */
+  removeNotification: (id: string) => Promise<void>;
+  /** Empty the whole list, outstanding rating prompts included. */
+  clearAll: () => Promise<void>;
 
   /** Completed games still owing a rating, newest first. */
   pendingRatings: Game[];
@@ -84,8 +100,26 @@ function byNewest(a: AppNotification, b: AppNotification): number {
   return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
 }
 
+/**
+ * Drop acknowledgements for games that are no longer pending, so the set can't
+ * grow without bound — but only for ids that were already acknowledged when the
+ * request went out. A game acknowledged *while* the fetch was in flight can't be
+ * judged by a response that predates it: the response simply doesn't know about
+ * it yet, and pruning on that basis would silently undo the acknowledgement and
+ * let the prompt reappear.
+ */
+function pruneAcknowledgements(
+  current: Set<string>,
+  atRequestStart: Set<string>,
+  stillPending: Set<string>,
+): Set<string> {
+  return new Set(
+    [...current].filter((id) => stillPending.has(id) || !atRequestStart.has(id)),
+  );
+}
+
 export function NotificationsProvider({ children }: { children: ReactNode }) {
-  const { token } = useSession();
+  const { token, user } = useSession();
   const [serverRows, setServerRows] = useState<AppNotification[]>([]);
   const [pendingRatings, setPendingRatings] = useState<Game[]>([]);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
@@ -98,10 +132,24 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   const known = useRef<Set<string>>(new Set());
   const seeded = useRef(false);
   const dismissedRef = useRef<Set<string>>(new Set());
-  // The poll timer, a screen focus and a pull-to-refresh can all fire at once.
-  // Without this guard two overlapping runs both diff against a `known` set
-  // neither has updated yet, and the same arrival is queued as two toasts.
-  const inFlight = useRef(false);
+  // Read by the bulk actions so they don't have to depend on (and be rebuilt
+  // by) every poll — an unstable `markAllRead` re-triggers the notification
+  // screen's focus effect, which calls it again, which polls again, forever.
+  const pendingRatingsRef = useRef<Game[]>([]);
+  const userIdRef = useRef<string | undefined>(user?.id);
+  useEffect(() => {
+    userIdRef.current = user?.id;
+  }, [user?.id]);
+
+  // A poll timer, a screen focus and a pull-to-refresh can all fire at once.
+  // Overlapping runs would both diff against a `known` set neither has updated
+  // yet and queue the same arrival as two toasts, so runs are serialized — but
+  // a request that lands mid-run is remembered and replayed rather than
+  // dropped, because callers use it to pick up a change they just made.
+  const inFlight = useRef<Promise<void> | null>(null);
+  const rerunRequested = useRef(false);
+  // Games already being resolved, so a poll mid-flight doesn't double-post.
+  const resolving = useRef<Set<string>>(new Set());
 
   const persistDismissed = useCallback((next: Set<string>) => {
     dismissedRef.current = next;
@@ -126,16 +174,53 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       });
   }, [token]);
 
+  /**
+   * Record a game as rated with no thumbs — exactly what submitting the prompt
+   * without choosing anyone does — so the server stops listing it as pending.
+   * Used both for games with nobody to rate and for rating rows the user
+   * deletes; either way the answer to "does this user still owe a rating?" is
+   * settled in the one place that owns it.
+   */
+  const resolveWithoutRating = useCallback((gameId: string) => {
+    if (resolving.current.has(gameId)) return;
+    resolving.current.add(gameId);
+    rateGame(gameId, []).catch(() => {
+      // Let a later poll try again.
+      resolving.current.delete(gameId);
+    });
+  }, []);
+
+  /** Drop a game from the pending list without waiting for the next poll. */
+  const forgetPending = useCallback((gameId: string) => {
+    const remaining = pendingRatingsRef.current.filter((g) => g.id !== gameId);
+    pendingRatingsRef.current = remaining;
+    setPendingRatings(remaining);
+  }, []);
+
   const refresh = useCallback(async () => {
-    if (!token || inFlight.current) return;
-    inFlight.current = true;
-    try {
-      await load();
-    } finally {
-      inFlight.current = false;
+    if (!token) return;
+    if (inFlight.current) {
+      rerunRequested.current = true;
+      return inFlight.current;
     }
 
+    const run = (async () => {
+      try {
+        do {
+          rerunRequested.current = false;
+          await load();
+        } while (rerunRequested.current);
+      } finally {
+        inFlight.current = null;
+      }
+    })();
+    inFlight.current = run;
+    return run;
+
     async function load() {
+      // Snapshotted before the requests go out — see `pruneAcknowledgements`.
+      const dismissedAtStart = new Set(dismissedRef.current);
+
       // A failed leg resolves to null so one flaky request doesn't blank the list.
       const [rows, ratingGames] = await Promise.all([
         getNotifications().catch(() => null),
@@ -143,22 +228,35 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       ]);
 
       let nextDismissed = dismissedRef.current;
+
       if (ratingGames) {
-        // Drop acknowledgements for games that are no longer pending (rated, or
-        // gone) so the set can't grow without bound.
-        const stillPending = new Set(ratingGames.map((g) => g.id));
-        const pruned = new Set([...nextDismissed].filter((id) => stillPending.has(id)));
-        if (pruned.size !== nextDismissed.size) {
+        // Games with nobody to rate are settled in the background instead of
+        // becoming a prompt with an empty list and no meaningful action.
+        const rateable = ratingGames.filter((game) => {
+          if (hasSomeoneToRate(game, userIdRef.current)) return true;
+          resolveWithoutRating(game.id);
+          return false;
+        });
+
+        const stillPending = new Set(rateable.map((g) => g.id));
+        const pruned = pruneAcknowledgements(
+          dismissedRef.current,
+          dismissedAtStart,
+          stillPending,
+        );
+        if (pruned.size !== dismissedRef.current.size) {
           nextDismissed = pruned;
           persistDismissed(pruned);
         }
-        setPendingRatings(ratingGames);
+
+        pendingRatingsRef.current = rateable;
+        setPendingRatings(rateable);
       }
       if (rows) setServerRows(rows);
 
       const merged = [
         ...(rows ?? serverRows),
-        ...buildRatingRows(ratingGames ?? pendingRatings, nextDismissed),
+        ...buildRatingRows(pendingRatingsRef.current, nextDismissed),
       ];
 
       if (!seeded.current) {
@@ -172,10 +270,10 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       const toToast = arrivals.filter((n) => !n.read).sort(byNewest);
       if (toToast.length > 0) setLiveQueue((prev) => [...prev, ...toToast]);
     }
-    // `serverRows`/`pendingRatings` are read only as a fallback for a failed
-    // leg; depending on them would rebuild this callback on every poll.
+    // `serverRows` is read only as a fallback for a failed leg; depending on it
+    // would rebuild this callback on every poll.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, persistDismissed]);
+  }, [token, persistDismissed, resolveWithoutRating]);
 
   // Reset everything on sign-out, and do the first load on sign-in.
   useEffect(() => {
@@ -185,6 +283,8 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       setLiveQueue([]);
       setDismissed(new Set());
       dismissedRef.current = new Set();
+      pendingRatingsRef.current = [];
+      resolving.current = new Set();
       known.current = new Set();
       seeded.current = false;
       return;
@@ -262,12 +362,12 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
 
   const clearRating = useCallback(
     (gameId: string) => {
-      setPendingRatings((prev) => prev.filter((g) => g.id !== gameId));
+      forgetPending(gameId);
       const next = new Set(dismissedRef.current);
       next.delete(gameId);
       persistDismissed(next);
     },
-    [persistDismissed],
+    [forgetPending, persistDismissed],
   );
 
   const markRead = useCallback(
@@ -289,14 +389,48 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   const markAllRead = useCallback(async () => {
     setServerRows((prev) => prev.map((n) => ({ ...n, read: true })));
     const next = new Set(dismissedRef.current);
-    pendingRatings.forEach((g) => next.add(g.id));
+    pendingRatingsRef.current.forEach((g) => next.add(g.id));
     persistDismissed(next);
     try {
       await markAllNotificationsRead();
     } catch {
       // Same as above — reconciled by the next poll.
     }
-  }, [pendingRatings, persistDismissed]);
+  }, [persistDismissed]);
+
+  const removeNotification = useCallback(
+    async (id: string) => {
+      // Deleting a rating row is a decision not to rate that game, recorded as
+      // a rating with no thumbs so the server stops asking.
+      if (id.startsWith(RATING_ID_PREFIX)) {
+        const gameId = id.slice(RATING_ID_PREFIX.length);
+        forgetPending(gameId);
+        resolveWithoutRating(gameId);
+        return;
+      }
+      setServerRows((prev) => prev.filter((n) => n.id !== id));
+      try {
+        await deleteNotification(id);
+      } catch {
+        // The row comes back on the next poll if the delete didn't land.
+      }
+    },
+    [forgetPending, resolveWithoutRating],
+  );
+
+  const clearAll = useCallback(async () => {
+    setServerRows([]);
+    // Same deal as a single rating row: settle each one rather than hiding it,
+    // or the next poll would put them all straight back.
+    pendingRatingsRef.current.forEach((g) => resolveWithoutRating(g.id));
+    pendingRatingsRef.current = [];
+    setPendingRatings([]);
+    try {
+      await clearNotifications();
+    } catch {
+      // Same as above.
+    }
+  }, [resolveWithoutRating]);
 
   const dismissLive = useCallback(() => setLiveQueue((prev) => prev.slice(1)), []);
 
@@ -308,6 +442,8 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       refresh,
       markRead,
       markAllRead,
+      removeNotification,
+      clearAll,
       pendingRatings,
       promptRating,
       dismissRating,
@@ -322,6 +458,8 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       refresh,
       markRead,
       markAllRead,
+      removeNotification,
+      clearAll,
       pendingRatings,
       promptRating,
       dismissRating,

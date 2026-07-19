@@ -46,6 +46,10 @@ export default function HomeScreen() {
   const [distanceNote, setDistanceNote] = useState<string | null>(null);
 
   const [ratingBusy, setRatingBusy] = useState(false);
+  // The rating prompt is only mounted while the feed is the visible screen. A
+  // native modal that presents (or tears down) during a navigation transition
+  // can leave its overlay stuck over the screen, swallowing every touch.
+  const [isFocused, setIsFocused] = useState(false);
 
   const loadGames = useCallback(() => {
     return discoverGames().then((data) => setGames(data));
@@ -118,11 +122,13 @@ export default function HomeScreen() {
   useFocusEffect(
     useCallback(() => {
       let active = true;
+      setIsFocused(true);
       loadGames().finally(() => {
         if (active) setIsLoading(false);
       });
       return () => {
         active = false;
+        setIsFocused(false);
       };
     }, [loadGames])
   );
@@ -270,7 +276,7 @@ export default function HomeScreen() {
       />
 
       <RatingModal
-        game={promptRating}
+        game={isFocused ? promptRating : null}
         currentUserId={user?.id}
         busy={ratingBusy}
         onSubmit={handleRateSubmit}

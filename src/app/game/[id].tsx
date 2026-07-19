@@ -38,7 +38,7 @@ import { useSession } from '@/contexts/session-context';
 import { useSavedGames } from '@/contexts/saved-games-context';
 import { useNotifications } from '@/contexts/notifications-context';
 import { positionsForSport } from '@/constants/positions';
-import { activeCount, isLive, statusMeta } from '@/utils/games';
+import { activeCount, hasSomeoneToRate, hasStarted, isLive, statusMeta } from '@/utils/games';
 import { formatGameDateTime } from '@/utils/format';
 import { colors, fonts, fontSizes, radii, spacing } from '@/constants/theme';
 import type { Game } from '@/types/game';
@@ -196,8 +196,10 @@ export default function GameDetailScreen() {
     try {
       const updated = await completeGame(game.id);
       setGame(updated);
-      // Prompt the host to rate the other players right away.
-      setRatingGame(updated);
+      // Prompt the host to rate the other players right away — but only if
+      // there were any. A solo or guests-only game has nobody to rate, and the
+      // notification centre settles those in the background instead.
+      if (hasSomeoneToRate(updated, user?.id)) setRatingGame(updated);
       // Pick the freshly completed game up as a pending rating now, so
       // dismissing the prompt leaves a notification behind rather than
       // waiting on the next poll.
@@ -252,9 +254,22 @@ export default function GameDetailScreen() {
     .filter(({ p }) => p.status === 'joined');
   const myEntry = game.participants.find((p) => p.user === user?.id && p.status === 'joined');
   const sportPositions = positionsForSport(game.sport.toLowerCase());
+  // Anyone already committed to the game can bring someone along, not just the
+  // host — matching what the API allows. Mirrors its other preconditions so the
+  // form doesn't offer an action that would only come back as an error.
+  const canAddGuest =
+    (isHost || alreadyIn) &&
+    game.status !== 'completed' &&
+    game.status !== 'cancelled' &&
+    !hasStarted(game);
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    // The modals are siblings of the ScrollView, not children of it. A native
+    // <Modal> nested in a scrolling view can be torn down mid-present when the
+    // route unmounts — which leaves its touch-blocking overlay behind on the
+    // screen you navigate to, and the app looks frozen.
+    <View style={styles.container}>
+      <ScrollView contentContainerStyle={styles.content}>
       <View style={styles.hero}>
         <GameBanner sport={game.sport} photoUrl={game.photo_url} iconSize={56} style={StyleSheet.absoluteFill} />
         <View style={[styles.heroStatus, { top: insets.top + spacing.sm, backgroundColor: meta.bg }]}>
@@ -403,10 +418,15 @@ export default function GameDetailScreen() {
           </View>
         )}
 
-        {/* Host: add a guest player. */}
-        {isHost && (
+        {/* Add a guest player — the host, or anyone on the roster. */}
+        {canAddGuest && (
           <View style={styles.section}>
             <Text style={styles.sectionLabel}>Add a guest</Text>
+            <Text style={styles.sectionHint}>
+              {isHost
+                ? 'Add someone playing who does not have an account.'
+                : 'Bringing a friend? Add them here — you can remove them again yourself.'}
+            </Text>
             <TextInput
               style={styles.guestInput}
               value={guestName}
@@ -454,6 +474,7 @@ export default function GameDetailScreen() {
           </Pressable>
         )}
       </View>
+      </ScrollView>
 
       <JoinPartySizeModal
         game={joinOpen ? game : null}
@@ -484,7 +505,7 @@ export default function GameDetailScreen() {
           setRatingGame(null);
         }}
       />
-    </ScrollView>
+    </View>
   );
 }
 
@@ -590,6 +611,7 @@ const styles = StyleSheet.create({
   playerUndecided: { marginLeft: 'auto', fontFamily: fonts.body, fontSize: fontSizes.xs, color: colors.muted, fontStyle: 'italic' },
   section: { marginTop: spacing.md, gap: spacing.sm },
   sectionLabel: { fontFamily: fonts.headingBold, fontSize: fontSizes.xs, textTransform: 'uppercase', letterSpacing: 0.6, color: colors.muted },
+  sectionHint: { fontFamily: fonts.body, fontSize: fontSizes.sm, color: colors.muted, marginTop: -4 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   chip: {
     paddingHorizontal: spacing.md,
