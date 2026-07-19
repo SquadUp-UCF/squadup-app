@@ -38,6 +38,7 @@ import { useSession } from '@/contexts/session-context';
 import { useSavedGames } from '@/contexts/saved-games-context';
 import { useNotifications } from '@/contexts/notifications-context';
 import { positionsForSport } from '@/constants/positions';
+import { gameSkillBadge } from '@/constants/skills';
 import { activeCount, hasSomeoneToRate, hasStarted, isLive, statusMeta } from '@/utils/games';
 import { formatGameDateTime } from '@/utils/format';
 import { colors, fonts, fontSizes, radii, spacing } from '@/constants/theme';
@@ -254,6 +255,7 @@ export default function GameDetailScreen() {
     .filter(({ p }) => p.status === 'joined');
   const myEntry = game.participants.find((p) => p.user === user?.id && p.status === 'joined');
   const sportPositions = positionsForSport(game.sport.toLowerCase());
+  const skill = gameSkillBadge(game.skill_level);
   // Anyone already committed to the game can bring someone along, not just the
   // host — matching what the API allows. Mirrors its other preconditions so the
   // form doesn't offer an action that would only come back as an error.
@@ -288,9 +290,19 @@ export default function GameDetailScreen() {
       </View>
 
       <View style={styles.body}>
-        <View style={styles.sportPill}>
-          <SportIcon sport={game.sport} size={16} color={colors.statusOpen.color} />
-          <Text style={styles.sportPillLabel}>{sportLabel(game.sport)}</Text>
+        {/* Sport, then the skill level it's pitched at — the same pair the feed
+            card shows, so a game reads the same in both places. Games open to
+            everyone show the sport alone (see gameSkillBadge). */}
+        <View style={styles.pillRow}>
+          <View style={styles.sportPill}>
+            <SportIcon sport={game.sport} size={16} color={colors.statusOpen.color} />
+            <Text style={styles.sportPillLabel}>{sportLabel(game.sport)}</Text>
+          </View>
+          {skill && (
+            <View style={[styles.skillPill, { backgroundColor: skill.bg }]}>
+              <Text style={[styles.skillPillLabel, { color: skill.color }]}>{skill.label}</Text>
+            </View>
+          )}
         </View>
 
         <View style={styles.titleRow}>
@@ -526,17 +538,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   body: { padding: spacing.xl, gap: spacing.sm },
+  // Wraps so a long sport + skill pair drops to a second line on a narrow
+  // screen rather than squeezing either pill.
+  pillRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, alignSelf: 'flex-start' },
   sportPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    alignSelf: 'flex-start',
     backgroundColor: colors.statusOpen.bg,
     paddingHorizontal: spacing.sm,
     paddingVertical: 4,
     borderRadius: radii.pill,
   },
   sportPillLabel: { fontFamily: fonts.bodyBold, fontSize: fontSizes.xs, color: colors.statusOpen.color, textTransform: 'capitalize' },
+  // Tinted by difficulty (colors.skill*), matching the feed card. Sized to this
+  // screen's slightly larger pill rather than the card's.
+  skillPill: { paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: radii.pill },
+  skillPillLabel: { fontFamily: fonts.bodyBold, fontSize: fontSizes.xs },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.xs },
   title: { fontFamily: fonts.heading, fontSize: fontSizes.xxl, color: colors.text, flexShrink: 1 },
   description: { fontFamily: fonts.body, fontSize: fontSizes.md, color: colors.muted, lineHeight: 20 },

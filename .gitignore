@@ -31,10 +31,21 @@ yarn-error.*
 *.pem
 
 # local env files
+# .env holds EXPO_PUBLIC_API_URL, which each developer points at a different
+# place — prod, or their own machine's LAN address for a local API. Committing
+# it silently repoints everyone else's build.
+.env
 .env*.local
 
 # typescript
 *.tsbuildinfo
+# Compiled output next to the sources it came from. Metro resolves .js before
+# .ts, so a stray emitted file shadows its own source and the app keeps running
+# a stale copy while the real one is edited to no effect.
+src/**/*.js
+src/**/*.jsx
+src/**/*.js.map
+src/**/*.d.ts
 
 example
 
