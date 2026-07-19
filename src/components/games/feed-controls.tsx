@@ -72,7 +72,16 @@ export function FeedControls({
   return (
     <View style={styles.wrap}>
       <View style={styles.toggleRow}>
-        <Text style={[styles.toggleLabel, viewMode === 'feed' && styles.toggleLabelActive]}>Feed View</Text>
+        <Text
+          style={[
+            styles.toggleLabel,
+            styles.toggleLabelLeft,
+            viewMode === 'feed' && styles.toggleLabelActive,
+          ]}
+          numberOfLines={1}
+        >
+          Feed View
+        </Text>
         <Switch
           value={viewMode === 'map'}
           onValueChange={(v) => setView(v ? 'map' : 'feed')}
@@ -80,7 +89,16 @@ export function FeedControls({
           thumbColor={colors.white}
           ios_backgroundColor={colors.borderStrong}
         />
-        <Text style={[styles.toggleLabel, viewMode === 'map' && styles.toggleLabelActive]}>Map View (Live)</Text>
+        <Text
+          style={[
+            styles.toggleLabel,
+            styles.toggleLabelRight,
+            viewMode === 'map' && styles.toggleLabelActive,
+          ]}
+          numberOfLines={1}
+        >
+          Map View (Live)
+        </Text>
       </View>
 
       <View style={styles.controlsRow}>
@@ -142,7 +160,18 @@ export function FeedControls({
 const styles = StyleSheet.create({
   wrap: { paddingHorizontal: spacing.lg, gap: spacing.sm },
   toggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
-  toggleLabel: { fontFamily: fonts.bodyMedium, fontSize: fontSizes.sm, color: colors.muted },
+  // Equal-width labels put the switch on the screen's centre line rather than
+  // the centre of the row: "Map View (Live)" is the wider label, so centring
+  // the group as a whole pushed the switch left. Fixed widths also stop the
+  // switch shifting when the active label turns bold.
+  toggleLabel: {
+    flex: 1,
+    fontFamily: fonts.bodyMedium,
+    fontSize: fontSizes.sm,
+    color: colors.muted,
+  },
+  toggleLabelLeft: { textAlign: 'right' },
+  toggleLabelRight: { textAlign: 'left' },
   toggleLabelActive: { color: colors.text, fontFamily: fonts.bodyBold },
   controlsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   control: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 },
