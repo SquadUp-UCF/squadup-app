@@ -108,11 +108,19 @@ export function GameCard({
               {formatGameDateTime(game.start_time)}
             </Text>
           </View>
-          <View style={styles.metaItem}>
-            <Feather name="users" size={13} color={colors.muted} />
-            <Text style={styles.metaText}>
-              {joined} / {game.max_players} · min {game.min_players}
-            </Text>
+          {/* Minimum sits above the roster count, sharing its right edge, so
+              the two numbers read as a pair: what it needs, what it has. */}
+          <View style={styles.metaCounts}>
+            <View style={styles.metaItem}>
+              <Feather name="target" size={13} color={colors.muted} />
+              <Text style={styles.metaText}>Min {game.min_players}</Text>
+            </View>
+            <View style={styles.metaItem}>
+              <Feather name="users" size={13} color={colors.muted} />
+              <Text style={styles.metaText}>
+                {joined} / {game.max_players}
+              </Text>
+            </View>
           </View>
         </View>
 
@@ -215,6 +223,7 @@ const styles = StyleSheet.create({
   // Only the date gives way when the row is too narrow — truncating the counts
   // would defeat the point of showing them.
   metaItemShrink: { flexShrink: 1 },
+  metaCounts: { alignItems: 'flex-end', gap: 2 },
   metaText: { fontFamily: fonts.body, fontSize: fontSizes.sm, color: colors.muted },
   barTrack: { height: 5, borderRadius: 3, backgroundColor: '#eee', overflow: 'hidden', marginTop: 4 },
   barFill: { height: '100%', borderRadius: 3 },
