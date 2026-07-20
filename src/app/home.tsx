@@ -189,7 +189,9 @@ export default function HomeScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <View style={styles.brand}>
-          <Logo size={32} />
+          <View style={styles.logoBadge}>
+            <Logo size={36} contentFit="cover" />
+          </View>
           <Text style={styles.brandName}>Squad-Up</Text>
         </View>
 
@@ -330,6 +332,16 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
   },
   brand: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  // Matches squadup-front's .pp-logo-badge: the logo is clipped into a rounded
+  // square rather than floating square-cornered against the header.
+  logoBadge: {
+    width: 36,
+    height: 36,
+    borderRadius: radii.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
   brandName: { fontFamily: fonts.heading, fontSize: fontSizes.xl, color: colors.text },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   postButton: { backgroundColor: colors.green, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radii.pill },
