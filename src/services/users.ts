@@ -21,7 +21,7 @@ function toUserProfile(raw: Record<string, any>): UserProfile {
     // Relative avatar paths (e.g. /uploads/avatars/x.jpg) resolve to absolute
     // URLs; a null stays null.
     profile_picture: mediaUrl(raw.profile_picture),
-    preferred_positions: raw.skill_levels ?? raw.preferred_positions ?? {},
+    preferred_positions: raw.skill_levels ?? {},
   };
 }
 
@@ -53,7 +53,7 @@ export async function getPlayerProfile(id: string): Promise<PlayerProfile | null
       reputation: typeof raw.reputation === 'number' ? raw.reputation : 5,
       games_created: typeof raw.games_created === 'number' ? raw.games_created : 0,
       games_joined: typeof raw.games_joined === 'number' ? raw.games_joined : 0,
-      preferred_positions: raw.skill_levels ?? raw.preferred_positions ?? {},
+      preferred_positions: raw.skill_levels ?? {},
     };
   } catch {
     return null;

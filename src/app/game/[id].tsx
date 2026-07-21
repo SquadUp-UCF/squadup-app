@@ -13,7 +13,6 @@ import {
   View,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import * as SecureStore from 'expo-secure-store';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -45,8 +44,6 @@ import { colors, fonts, fontSizes, radii, spacing } from '@/constants/theme';
 import type { Game } from '@/types/game';
 import type { UserProfile } from '@/types/user';
 
-const NOTIFICATIONS_KEY_PREFIX = 'squadup_notifications_';
-
 export default function GameDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useSession();
@@ -61,7 +58,6 @@ export default function GameDetailScreen() {
   const [loadedId, setLoadedId] = useState<string | null>(null);
   const loading = loadedId !== id;
   const [roster, setRoster] = useState<Record<string, UserProfile | null>>({});
-  const [notifsEnabled, setNotifsEnabled] = useState(false);
   const [joinOpen, setJoinOpen] = useState(false);
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState('');
@@ -82,7 +78,6 @@ export default function GameDetailScreen() {
       setGame(data);
       setLoadedId(id);
     });
-    SecureStore.getItemAsync(`${NOTIFICATIONS_KEY_PREFIX}${id}`).then((v) => setNotifsEnabled(v === 'true'));
   }, [id]);
 
   const fetchedIdsRef = useRef<Set<string>>(new Set());
@@ -226,12 +221,6 @@ export default function GameDetailScreen() {
     }
   }
 
-  async function toggleNotifications() {
-    const next = !notifsEnabled;
-    setNotifsEnabled(next);
-    await SecureStore.setItemAsync(`${NOTIFICATIONS_KEY_PREFIX}${id}`, String(next));
-  }
-
   if (loading || !game) {
     return (
       <View style={styles.loadingWrap}>
@@ -332,11 +321,6 @@ export default function GameDetailScreen() {
             </Text>
           </View>
         </View>
-
-        <Pressable style={styles.notifBtn} onPress={toggleNotifications}>
-          <Feather name={notifsEnabled ? 'bell' : 'bell-off'} size={16} color={colors.green} />
-          <Text style={styles.notifBtnLabel}>{notifsEnabled ? 'Notifications on' : 'Enable notifications'}</Text>
-        </Pressable>
 
         {isHost && (
           <View style={styles.hostActions}>
@@ -568,19 +552,6 @@ const styles = StyleSheet.create({
   },
   metaItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   metaText: { fontFamily: fonts.body, fontSize: fontSizes.sm, color: colors.muted },
-  notifBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    alignSelf: 'flex-start',
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    marginTop: spacing.xs,
-  },
-  notifBtnLabel: { fontFamily: fonts.bodyMedium, fontSize: fontSizes.sm, color: colors.green },
   hostActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
   hostBtn: {
     flexDirection: 'row',
