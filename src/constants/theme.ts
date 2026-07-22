@@ -22,6 +22,9 @@ export const colors = {
   live: { bg: '#FDE6E6', color: '#C81E1E' },
   fillingUp: '#E4572E',
   new: { bg: '#E4F3E8', color: '#1F6B3E' },
+  // Marks a game the viewer hosts in the feed. Purple to stand apart from the
+  // green/orange/red status hues; deep enough to clear WCAG AA with white text.
+  host: '#6d28d9',
 
   // Skill level, as a difficulty gradient: green is easy going, red is serious.
   // Deliberately their own entries rather than borrowed status colors — a game

@@ -65,6 +65,7 @@ export function GameCard({
         <GameBanner sport={game.sport} photoUrl={game.photo_url} iconSize={64} style={StyleSheet.absoluteFill} />
 
         <View style={styles.badgesLeft}>
+          {isHost && <Badge label="Your game" bg={colors.host} color={colors.white} />}
           {live ? (
             <Badge label="LIVE" bg={colors.live.bg} color={colors.live.color} />
           ) : (
@@ -159,7 +160,7 @@ export function GameCard({
             disabled={!joinable || joiningId === game.id}
           >
             <Text style={joinable ? styles.joinLabel : styles.joinLabelDisabled}>
-              {game.status === 'locked' ? 'Full' : joiningId === game.id ? 'Joining…' : 'Join game'}
+              {game.status === 'locked' ? 'Full' : joiningId === game.id ? 'Joining…' : 'Join Game'}
             </Text>
           </Pressable>
         )}

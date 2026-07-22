@@ -1,6 +1,7 @@
 // main feed
 import { useCallback, useMemo, useState } from 'react';
 import { FlatList, Modal, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
 import * as Location from 'expo-location';
@@ -265,6 +266,7 @@ export default function HomeScreen() {
 
       <View style={styles.createWrap} pointerEvents="box-none">
         <Pressable style={styles.createButton} onPress={() => router.push('/post-game')}>
+          <Feather name="plus" size={22} color={colors.white} />
           <Text style={styles.createButtonText}>Create Game</Text>
         </Pressable>
       </View>
@@ -376,17 +378,24 @@ const styles = StyleSheet.create({
   list: { padding: spacing.lg, paddingTop: 0, paddingBottom: 96 },
   createWrap: { position: 'absolute', left: 0, right: 0, bottom: 28, alignItems: 'center' },
   createButton: {
-    backgroundColor: colors.green,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    // Deeper green than the cards' `green` "Join Game" buttons, plus a white
+    // ring, so the primary action stands off the feed instead of blending in.
+    backgroundColor: colors.greenDeep,
+    borderWidth: 2,
+    borderColor: colors.white,
+    paddingHorizontal: spacing.xxl,
+    paddingVertical: 18,
     borderRadius: radii.pill,
     shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 4,
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
   },
-  createButtonText: { color: colors.white, fontFamily: fonts.bodyBold, fontSize: fontSizes.lg },
+  createButtonText: { color: colors.white, fontFamily: fonts.bodyBold, fontSize: fontSizes.xl },
   menuBackdrop: { flex: 1, backgroundColor: 'rgba(13,43,24,0.3)' },
   menu: {
     position: 'absolute',

@@ -381,7 +381,9 @@ export default function GameDetailScreen() {
                 )}
                 {p.position ? (
                   <Text style={styles.playerPosition}>{p.position}</Text>
-                ) : isGuest ? (
+                ) : isGuest && sportPositions.length > 0 ? (
+                  // Only prompt "Undecided" when the sport actually has positions
+                  // to choose from; positionless sports show nothing.
                   <Text style={styles.playerUndecided}>Undecided</Text>
                 ) : null}
                 {/* The host manages the whole roster; everyone else can take
@@ -468,7 +470,7 @@ export default function GameDetailScreen() {
             disabled={!joinable}
           >
             <Text style={joinable ? styles.joinLabel : styles.joinLabelDisabled}>
-              {game.status === 'locked' ? 'Full' : 'Join game'}
+              {game.status === 'locked' ? 'Full' : 'Join Game'}
             </Text>
           </Pressable>
         )}

@@ -60,7 +60,7 @@ export function JoinPartySizeModal({ game, busy = false, error = '', onConfirm, 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <Pressable style={styles.overlay} onPress={busy ? undefined : close}>
         <Pressable style={styles.dialog} onPress={(e) => e.stopPropagation()}>
-          <Text style={styles.title}>Join game</Text>
+          <Text style={styles.title}>Join Game</Text>
           <Text style={styles.message}>
             Bring guests? {remaining} spot{remaining === 1 ? '' : 's'} for guests.
           </Text>
@@ -110,7 +110,7 @@ export function JoinPartySizeModal({ game, busy = false, error = '', onConfirm, 
             </Pressable>
             <Pressable style={styles.confirmBtn} onPress={confirm} disabled={busy}>
               <Text style={styles.confirmLabel}>
-                {busy ? 'Joining…' : guests.length === 0 ? 'Join game' : `Join with ${guests.length}`}
+                {busy ? 'Joining…' : guests.length === 0 ? 'Join Game' : `Join with ${guests.length}`}
               </Text>
             </Pressable>
           </View>
