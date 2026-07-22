@@ -1,7 +1,7 @@
 // Create / edit a game. Collects sport, a map pin, time, roster size, target
 // skill level, the host's own position, and (on create) initial guest players.
 import { useEffect, useState, type ReactNode } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View, Platform } from 'react-native';
+import { KeyboardAvoidingView, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View, Platform } from 'react-native';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { TextField } from '@/components/ui/text-field';
@@ -232,7 +232,8 @@ export default function PostGameScreen() {
   if (loadingExisting) return null;
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       <View style={styles.banner}>
         <GameBanner sport={effectiveSport} photoUrl={bannerPhoto} iconSize={48} style={StyleSheet.absoluteFill} />
       </View>
@@ -384,7 +385,8 @@ export default function PostGameScreen() {
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
       <PrimaryButton label={isEdit ? 'Save changes' : 'Post a game'} loading={isSubmitting} onPress={handleSubmit} />
-    </ScrollView>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 

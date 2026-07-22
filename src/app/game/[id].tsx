@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -260,7 +262,8 @@ export default function GameDetailScreen() {
     // route unmounts — which leaves its touch-blocking overlay behind on the
     // screen you navigate to, and the app looks frozen.
     <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <View style={styles.hero}>
         <GameBanner sport={game.sport} photoUrl={game.photo_url} iconSize={56} style={StyleSheet.absoluteFill} />
         <View style={[styles.heroStatus, { top: insets.top + spacing.sm, backgroundColor: meta.bg }]}>
@@ -471,6 +474,7 @@ export default function GameDetailScreen() {
         )}
       </View>
       </ScrollView>
+      </KeyboardAvoidingView>
 
       <JoinPartySizeModal
         game={joinOpen ? game : null}

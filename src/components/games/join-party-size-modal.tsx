@@ -2,7 +2,7 @@
 // the caller bring named guests (each with an optional, sport-specific position)
 // who each take a spot on the roster — or just join solo.
 import { useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import type { Game } from '@/types/game';
 import { activeCount } from '@/utils/games';
@@ -55,6 +55,9 @@ export function JoinPartySizeModal({ game, busy = false, error = '', onConfirm, 
 
   return (
     <Modal visible={Boolean(game)} transparent animationType="fade" onRequestClose={busy ? undefined : close}>
+      {/* Lifts the centered dialog above the keyboard so the guest-name input
+          stays visible while typing. */}
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <Pressable style={styles.overlay} onPress={busy ? undefined : close}>
         <Pressable style={styles.dialog} onPress={(e) => e.stopPropagation()}>
           <Text style={styles.title}>Join game</Text>
@@ -113,6 +116,7 @@ export function JoinPartySizeModal({ game, busy = false, error = '', onConfirm, 
           </View>
         </Pressable>
       </Pressable>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
