@@ -18,7 +18,7 @@ import { discoverGames, deleteGame, joinGame, leaveGame, rateGame } from '@/serv
 import { useSession } from '@/contexts/session-context';
 import { useNotifications } from '@/contexts/notifications-context';
 import { useSavedGames } from '@/contexts/saved-games-context';
-import { activeCount } from '@/utils/games';
+import { activeCount, isLiveOrSoon } from '@/utils/games';
 import { distanceKm } from '@/utils/geo';
 import { colors, fonts, fontSizes, radii, spacing } from '@/constants/theme';
 import type { Game } from '@/types/game';
@@ -130,6 +130,10 @@ export default function HomeScreen() {
     }
     return sorted;
   }, [games, sportFilters, skillFilters, savedOnly, isSaved, sortBy, userLocation]);
+
+  // The map is scoped to games you could actually get to now — live or starting
+  // within the next few hours — which is what "Map View (Live)" promises.
+  const mapGames = useMemo(() => visibleGames.filter((g) => isLiveOrSoon(g)), [visibleGames]);
 
   const hasFilters = sportFilters.length > 0 || skillFilters.length > 0 || savedOnly;
 
@@ -249,7 +253,7 @@ export default function HomeScreen() {
         {isLoading ? (
           <Text style={styles.loading}>Loading games…</Text>
         ) : viewMode === 'map' ? (
-          <GamesMap games={visibleGames} onSelect={(id) => router.push(`/game/${id}`)} />
+          <GamesMap games={mapGames} onSelect={(id) => router.push(`/game/${id}`)} />
         ) : visibleGames.length === 0 ? (
           <View style={styles.empty}>
             <Text style={styles.emptyTitle}>{hasFilters ? 'No games match your filters' : 'No games yet'}</Text>

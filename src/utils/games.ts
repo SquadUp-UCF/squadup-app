@@ -48,6 +48,19 @@ export function isActive(game: Game, now = Date.now()) {
   return start + LIVE_WINDOW_MS >= now;
 }
 
+// The map surfaces games you could realistically show up to right now: live, or
+// kicking off within the next few hours — which is what the "Map View (Live)"
+// toggle name promises.
+export const SOON_WINDOW_MS = 3 * 60 * 60 * 1000;
+
+export function isLiveOrSoon(game: Game, now = Date.now()) {
+  if (isLive(game, now)) return true;
+  if (game.status === 'completed' || game.status === 'cancelled') return false;
+  const start = new Date(game.start_time).getTime();
+  if (Number.isNaN(start)) return false;
+  return start > now && start <= now + SOON_WINDOW_MS;
+}
+
 /** Whether kickoff has passed — the API stops accepting new guests at that point. */
 export function hasStarted(game: Game, now = Date.now()) {
   const start = new Date(game.start_time).getTime();

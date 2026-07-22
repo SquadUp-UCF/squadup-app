@@ -89,6 +89,7 @@ export function FeedControls({
           trackColor={{ false: colors.borderStrong, true: colors.green }}
           thumbColor={colors.white}
           ios_backgroundColor={colors.borderStrong}
+          style={styles.toggleSwitch}
         />
         <Text
           style={[
@@ -108,17 +109,17 @@ export function FeedControls({
           <Text style={[styles.controlText, { color: filterColor }]}>Filter</Text>
         </Pressable>
 
+        {viewMode === 'feed' ? (
+          <Pressable style={styles.control} onPress={() => setOpenPanel(sortOpen ? null : 'sort')}>
+            <Feather name="chevrons-down" size={18} color={sortColor} />
+            <Text style={[styles.controlText, { color: sortColor }]}>Sort</Text>
+          </Pressable>
+        ) : null}
+
         <Pressable style={styles.control} onPress={() => onSavedOnly(!savedOnly)}>
           <Feather name="heart" size={16} color={savedColor} />
           <Text style={[styles.controlText, { color: savedColor }]}>Saved</Text>
         </Pressable>
-
-        {viewMode === 'feed' ? (
-          <Pressable style={styles.control} onPress={() => setOpenPanel(sortOpen ? null : 'sort')}>
-            <Feather name="chevrons-down" size={16} color={sortColor} />
-            <Text style={[styles.controlText, { color: sortColor }]}>Sort</Text>
-          </Pressable>
-        ) : null}
       </View>
 
       {filterOpen ? (
@@ -165,7 +166,9 @@ export function FeedControls({
 
 const styles = StyleSheet.create({
   wrap: { paddingHorizontal: spacing.lg, gap: spacing.sm },
-  toggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
+  // Bigger, and clearly set apart from the Filter/Sort/Saved toolbar below.
+  toggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.md, paddingVertical: spacing.xs, marginBottom: spacing.md },
+  toggleSwitch: { transform: [{ scaleX: 1.15 }, { scaleY: 1.15 }] },
   // Equal-width labels put the switch on the screen's centre line rather than
   // the centre of the row: "Map View (Live)" is the wider label, so centring
   // the group as a whole pushed the switch left. Fixed widths also stop the
@@ -173,13 +176,13 @@ const styles = StyleSheet.create({
   toggleLabel: {
     flex: 1,
     fontFamily: fonts.bodyMedium,
-    fontSize: fontSizes.sm,
+    fontSize: fontSizes.md,
     color: colors.muted,
   },
   toggleLabelLeft: { textAlign: 'right' },
   toggleLabelRight: { textAlign: 'left' },
   toggleLabelActive: { color: colors.text, fontFamily: fonts.bodyBold },
-  controlsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  controlsRow: { flexDirection: 'row', justifyContent: 'flex-start', alignItems: 'center', gap: spacing.xl },
   control: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 },
   controlText: { fontFamily: fonts.bodyBold, fontSize: fontSizes.md },
   panel: {
