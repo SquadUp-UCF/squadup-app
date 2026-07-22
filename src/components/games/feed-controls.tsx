@@ -24,10 +24,12 @@ const SORTS: { value: SortKey; label: string }[] = [
 type Props = {
   viewMode: ViewMode;
   onViewMode: (mode: ViewMode) => void;
-  sport: string; // '' = all sports
-  onSport: (sport: string) => void;
-  skill: SkillFilter | null; // null = any skill
-  onSkill: (skill: SkillFilter | null) => void;
+  sports: string[]; // [] = all sports; multiple = OR
+  onToggleSport: (sport: string) => void;
+  skills: SkillFilter[]; // [] = any skill; multiple = OR
+  onToggleSkill: (skill: SkillFilter) => void;
+  savedOnly: boolean;
+  onSavedOnly: (value: boolean) => void;
   sort: SortKey;
   onSort: (sort: SortKey) => void;
   distanceNote?: string | null;
@@ -44,10 +46,12 @@ function Chip({ label, selected, onPress }: { label: string; selected: boolean; 
 export function FeedControls({
   viewMode,
   onViewMode,
-  sport,
-  onSport,
-  skill,
-  onSkill,
+  sports,
+  onToggleSport,
+  skills,
+  onToggleSkill,
+  savedOnly,
+  onSavedOnly,
   sort,
   onSort,
   distanceNote,
@@ -55,7 +59,7 @@ export function FeedControls({
   const [openPanel, setOpenPanel] = useState<'filter' | 'sort' | null>(null);
   const filterOpen = openPanel === 'filter';
   const sortOpen = openPanel === 'sort';
-  const hasFilters = sport !== '' || skill !== null;
+  const hasFilters = sports.length > 0 || skills.length > 0;
 
   function setView(mode: ViewMode) {
     if (mode === 'map' && sortOpen) setOpenPanel(null);
@@ -64,6 +68,7 @@ export function FeedControls({
 
   const filterColor = filterOpen || hasFilters ? colors.green : colors.text;
   const sortColor = sortOpen ? colors.green : colors.text;
+  const savedColor = savedOnly ? colors.green : colors.text;
 
   return (
     <View style={styles.wrap}>
@@ -103,6 +108,11 @@ export function FeedControls({
           <Text style={[styles.controlText, { color: filterColor }]}>Filter</Text>
         </Pressable>
 
+        <Pressable style={styles.control} onPress={() => onSavedOnly(!savedOnly)}>
+          <Feather name="heart" size={16} color={savedColor} />
+          <Text style={[styles.controlText, { color: savedColor }]}>Saved</Text>
+        </Pressable>
+
         {viewMode === 'feed' ? (
           <Pressable style={styles.control} onPress={() => setOpenPanel(sortOpen ? null : 'sort')}>
             <Feather name="chevrons-down" size={16} color={sortColor} />
@@ -119,8 +129,8 @@ export function FeedControls({
               <Chip
                 key={s}
                 label={sportLabel(s)}
-                selected={sport === s}
-                onPress={() => onSport(sport === s ? '' : s)}
+                selected={sports.includes(s)}
+                onPress={() => onToggleSport(s)}
               />
             ))}
           </View>
@@ -131,8 +141,8 @@ export function FeedControls({
               <Chip
                 key={s.value}
                 label={s.label}
-                selected={skill === s.value}
-                onPress={() => onSkill(skill === s.value ? null : s.value)}
+                selected={skills.includes(s.value)}
+                onPress={() => onToggleSkill(s.value)}
               />
             ))}
           </View>
@@ -180,7 +190,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: colors.white,
   },
-  panelContent: { gap: spacing.sm },
+  panelContent: { gap: spacing.sm, paddingBottom: spacing.md },
   group: { fontFamily: fonts.headingBold, fontSize: fontSizes.xs, textTransform: 'uppercase', letterSpacing: 0.6, color: colors.muted, marginTop: 2 },
   wrapRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   chip: {

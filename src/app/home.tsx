@@ -12,10 +12,12 @@ import { RatingModal } from '@/components/games/rating-modal';
 import { FeedControls, type ViewMode, type SortKey, type SkillFilter } from '@/components/games/feed-controls';
 import { GamesMap } from '@/components/games/games-map';
 import { Logo } from '@/components/ui/logo';
+import { PulsingDot } from '@/components/ui/pulsing-dot';
 import { NotificationBell } from '@/components/notifications/notification-bell';
 import { discoverGames, deleteGame, joinGame, leaveGame, rateGame } from '@/services/games';
 import { useSession } from '@/contexts/session-context';
 import { useNotifications } from '@/contexts/notifications-context';
+import { useSavedGames } from '@/contexts/saved-games-context';
 import { activeCount } from '@/utils/games';
 import { distanceKm } from '@/utils/geo';
 import { colors, fonts, fontSizes, radii, spacing } from '@/constants/theme';
@@ -26,6 +28,7 @@ export default function HomeScreen() {
   // The rating queue lives in the notification centre so "Later" parks the
   // prompt as a notification instead of losing it until the next app launch.
   const { promptRating, dismissRating, clearRating } = useNotifications();
+  const { isSaved } = useSavedGames();
   const [games, setGames] = useState<Game[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -40,8 +43,9 @@ export default function HomeScreen() {
 
   // View toggle + filters + sort (applied client-side over the fetched list).
   const [viewMode, setViewMode] = useState<ViewMode>('feed');
-  const [sportFilter, setSportFilter] = useState(''); // '' = all sports
-  const [skillFilter, setSkillFilter] = useState<SkillFilter | null>(null);
+  const [sportFilters, setSportFilters] = useState<string[]>([]); // [] = all sports
+  const [skillFilters, setSkillFilters] = useState<SkillFilter[]>([]); // [] = any skill
+  const [savedOnly, setSavedOnly] = useState(false);
   const [sortBy, setSortBy] = useState<SortKey>('recent');
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [distanceNote, setDistanceNote] = useState<string | null>(null);
@@ -89,10 +93,24 @@ export default function HomeScreen() {
     if (next === 'distance' && !userLocation) ensureLocation();
   }
 
+  const toggleSport = useCallback(
+    (s: string) => setSportFilters((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s])),
+    [],
+  );
+  const toggleSkill = useCallback(
+    (s: SkillFilter) => setSkillFilters((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s])),
+    [],
+  );
+
   const visibleGames = useMemo(() => {
     let list = games;
-    if (sportFilter) list = list.filter((g) => g.sport === sportFilter);
-    if (skillFilter !== null) list = list.filter((g) => (g.skill_level ?? 'all') === skillFilter);
+    // Multiple sports/skills read as OR: a game matches if it's in any selected
+    // sport (and, independently, any selected skill). Empty = no constraint.
+    if (sportFilters.length) list = list.filter((g) => sportFilters.includes(g.sport));
+    if (skillFilters.length) {
+      list = list.filter((g) => skillFilters.includes((g.skill_level ?? 'all') as SkillFilter));
+    }
+    if (savedOnly) list = list.filter((g) => isSaved(g.id));
 
     const sorted = [...list];
     if (sortBy === 'players') {
@@ -111,9 +129,9 @@ export default function HomeScreen() {
       sorted.sort((a, b) => recency(b) - recency(a));
     }
     return sorted;
-  }, [games, sportFilter, skillFilter, sortBy, userLocation]);
+  }, [games, sportFilters, skillFilters, savedOnly, isSaved, sortBy, userLocation]);
 
-  const hasFilters = sportFilter !== '' || skillFilter !== null;
+  const hasFilters = sportFilters.length > 0 || skillFilters.length > 0 || savedOnly;
 
   // Re-runs every time this screen comes back into focus (not just on first
   // mount) — so returning from Post Game picks up the newly created game. Only
@@ -206,7 +224,7 @@ export default function HomeScreen() {
 
       <View style={styles.hero}>
         <View style={styles.liveBadge}>
-          <View style={styles.liveDot} />
+          <PulsingDot color="#ff5555" size={8} />
           <Text style={styles.liveBadgeText}>LIVE - UCF verified only</Text>
         </View>
         <Text style={styles.heroTitle}>Welcome{user?.username ? `, ${user.username}` : ''}</Text>
@@ -216,10 +234,12 @@ export default function HomeScreen() {
       <FeedControls
         viewMode={viewMode}
         onViewMode={setViewMode}
-        sport={sportFilter}
-        onSport={setSportFilter}
-        skill={skillFilter}
-        onSkill={setSkillFilter}
+        sports={sportFilters}
+        onToggleSport={toggleSport}
+        skills={skillFilters}
+        onToggleSkill={toggleSkill}
+        savedOnly={savedOnly}
+        onSavedOnly={setSavedOnly}
         sort={sortBy}
         onSort={handleSort}
         distanceNote={distanceNote}
@@ -366,7 +386,6 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   liveBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', marginBottom: 4 },
-  liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#ff5555' },
   liveBadgeText: { color: colors.greenAccent, fontFamily: fonts.bodyBold, fontSize: fontSizes.xs },
   heroTitle: { color: colors.white, fontFamily: fonts.heading, fontSize: fontSizes.xxl },
   heroSubtitle: { color: colors.greenAccent, fontFamily: fonts.body, fontSize: fontSizes.md },

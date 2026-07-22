@@ -32,6 +32,7 @@ import { getUser } from '@/services/users';
 import { SportIcon, sportLabel } from '@/components/ui/sport-icon';
 import { GameBanner } from '@/components/games/game-banner';
 import { Dropdown } from '@/components/ui/dropdown';
+import { PulsingDot } from '@/components/ui/pulsing-dot';
 import { JoinPartySizeModal } from '@/components/games/join-party-size-modal';
 import { ConfirmModal } from '@/components/games/confirm-modal';
 import { RatingModal } from '@/components/games/rating-modal';
@@ -255,6 +256,14 @@ export default function GameDetailScreen() {
     game.status !== 'completed' &&
     game.status !== 'cancelled' &&
     !hasStarted(game);
+  // Same audience and game states as canAddGuest, but after kickoff — the API
+  // stops accepting guests once a game has started, so we explain the closure
+  // rather than silently dropping the form.
+  const guestsClosedByStart =
+    (isHost || alreadyIn) &&
+    game.status !== 'completed' &&
+    game.status !== 'cancelled' &&
+    hasStarted(game);
 
   return (
     // The modals are siblings of the ScrollView, not children of it. A native
@@ -266,8 +275,16 @@ export default function GameDetailScreen() {
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <View style={styles.hero}>
         <GameBanner sport={game.sport} photoUrl={game.photo_url} iconSize={56} style={StyleSheet.absoluteFill} />
-        <View style={[styles.heroStatus, { top: insets.top + spacing.sm, backgroundColor: meta.bg }]}>
-          <Text style={[styles.heroStatusText, { color: meta.color }]}>{live ? 'LIVE' : meta.label}</Text>
+        <View
+          style={[
+            styles.heroStatus,
+            { top: insets.top + spacing.sm, backgroundColor: live ? colors.live.bg : meta.bg },
+          ]}
+        >
+          {live && <PulsingDot color={colors.live.color} size={7} />}
+          <Text style={[styles.heroStatusText, { color: live ? colors.live.color : meta.color }]}>
+            {live ? 'LIVE' : meta.label}
+          </Text>
         </View>
         <View style={[styles.heroActions, { top: insets.top + spacing.sm }]}>
           {!isHost && (
@@ -456,6 +473,18 @@ export default function GameDetailScreen() {
           </View>
         )}
 
+        {guestsClosedByStart && (
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>Add a guest</Text>
+            <View style={styles.noticeBox}>
+              <Feather name="clock" size={16} color={colors.muted} />
+              <Text style={styles.noticeText}>
+                This game has already started, so you can no longer add guests to the roster.
+              </Text>
+            </View>
+          </View>
+        )}
+
         {actionError ? <Text style={styles.errorText}>{actionError}</Text> : null}
 
         {!isHost && alreadyIn && (
@@ -516,7 +545,7 @@ const styles = StyleSheet.create({
   content: { paddingBottom: spacing.xxl },
   loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   hero: { height: 200 },
-  heroStatus: { position: 'absolute', left: spacing.lg, paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: radii.pill },
+  heroStatus: { position: 'absolute', left: spacing.lg, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: radii.pill },
   heroStatusText: { fontFamily: fonts.bodyBold, fontSize: fontSizes.xs },
   heroActions: { position: 'absolute', right: spacing.lg, flexDirection: 'row', gap: spacing.sm },
   heroBtn: {
@@ -607,6 +636,8 @@ const styles = StyleSheet.create({
   section: { marginTop: spacing.md, gap: spacing.sm },
   sectionLabel: { fontFamily: fonts.headingBold, fontSize: fontSizes.xs, textTransform: 'uppercase', letterSpacing: 0.6, color: colors.muted },
   sectionHint: { fontFamily: fonts.body, fontSize: fontSizes.sm, color: colors.muted, marginTop: -4 },
+  noticeBox: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.surface, borderRadius: radii.md, padding: spacing.md },
+  noticeText: { flex: 1, fontFamily: fonts.body, fontSize: fontSizes.sm, color: colors.muted },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   chip: {
     paddingHorizontal: spacing.md,
