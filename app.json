@@ -7,6 +7,10 @@
     "icon": "./assets/images/logo.png",
     "scheme": "squadupapp",
     "userInterfaceStyle": "automatic",
+    "ios": {
+      "bundleIdentifier": "com.tiagosabbioni.squadup",
+      "supportsTablet": true
+    },
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#141414",
