@@ -4,7 +4,8 @@
 // in the parent (home); this is presentational. Styled with the shared theme.
 import { useState } from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet, Switch } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { Feather, Ionicons } from '@expo/vector-icons';
+import { PulsingDot } from '@/components/ui/pulsing-dot';
 import { availableSports, sportLabel } from '@/components/ui/sport-icon';
 import { SKILL_LEVELS, type SkillLevel } from '@/constants/skills';
 import { colors, fonts, fontSizes, radii, spacing } from '@/constants/theme';
@@ -74,11 +75,7 @@ export function FeedControls({
     <View style={styles.wrap}>
       <View style={styles.toggleRow}>
         <Text
-          style={[
-            styles.toggleLabel,
-            styles.toggleLabelLeft,
-            viewMode === 'feed' && styles.toggleLabelActive,
-          ]}
+          style={[styles.toggleLabel, styles.toggleLabelLeft, viewMode === 'feed' && styles.toggleLabelActive]}
           numberOfLines={1}
         >
           Feed View
@@ -92,14 +89,10 @@ export function FeedControls({
           style={styles.toggleSwitch}
         />
         <Text
-          style={[
-            styles.toggleLabel,
-            styles.toggleLabelRight,
-            viewMode === 'map' && styles.toggleLabelActive,
-          ]}
+          style={[styles.toggleLabel, styles.toggleLabelRight, viewMode === 'map' && styles.toggleLabelActive]}
           numberOfLines={1}
         >
-          Map View (Live)
+          Map View
         </Text>
       </View>
 
@@ -117,9 +110,16 @@ export function FeedControls({
         ) : null}
 
         <Pressable style={styles.control} onPress={() => onSavedOnly(!savedOnly)}>
-          <Feather name="heart" size={16} color={savedColor} />
+          <Ionicons name={savedOnly ? 'heart' : 'heart-outline'} size={17} color={savedColor} />
           <Text style={[styles.controlText, { color: savedColor }]}>Saved</Text>
         </Pressable>
+
+        {viewMode === 'map' ? (
+          <View style={styles.liveOnlyBadge}>
+            <PulsingDot color={colors.live.color} size={6} />
+            <Text style={styles.liveOnlyText}>Live Only</Text>
+          </View>
+        ) : null}
       </View>
 
       {filterOpen ? (
@@ -166,22 +166,28 @@ export function FeedControls({
 
 const styles = StyleSheet.create({
   wrap: { paddingHorizontal: spacing.lg, gap: spacing.sm },
-  // Bigger, and clearly set apart from the Filter/Sort/Saved toolbar below.
-  toggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.md, paddingVertical: spacing.xs, marginBottom: spacing.md },
-  toggleSwitch: { transform: [{ scaleX: 1.15 }, { scaleY: 1.15 }] },
-  // Equal-width labels put the switch on the screen's centre line rather than
-  // the centre of the row: "Map View (Live)" is the wider label, so centring
-  // the group as a whole pushed the switch left. Fixed widths also stop the
-  // switch shifting when the active label turns bold.
-  toggleLabel: {
-    flex: 1,
-    fontFamily: fonts.bodyMedium,
-    fontSize: fontSizes.md,
-    color: colors.muted,
-  },
+  // Bigger Feed/Map toggle, centred: equal-width (flex) labels put the switch on
+  // the screen's centre line, and stop it shifting when the active label bolds.
+  // Set apart from the Filter/Sort/Saved toolbar below with marginBottom.
+  toggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.lg, paddingVertical: spacing.sm, marginBottom: spacing.md },
+  toggleSwitch: { transform: [{ scaleX: 1.3 }, { scaleY: 1.3 }] },
+  toggleLabel: { flex: 1, fontFamily: fonts.bodyMedium, fontSize: fontSizes.lg, color: colors.muted },
   toggleLabelLeft: { textAlign: 'right' },
   toggleLabelRight: { textAlign: 'left' },
   toggleLabelActive: { color: colors.text, fontFamily: fonts.bodyBold },
+  // Pinned to the right of the Filter/Sort/Saved row (map view only), flagging
+  // that the map is scoped to live/soon games.
+  liveOnlyBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginLeft: 'auto',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: radii.pill,
+    backgroundColor: colors.live.bg,
+  },
+  liveOnlyText: { fontFamily: fonts.bodyBold, fontSize: fontSizes.xs, color: colors.live.color },
   controlsRow: { flexDirection: 'row', justifyContent: 'flex-start', alignItems: 'center', gap: spacing.xl },
   control: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 },
   controlText: { fontFamily: fonts.bodyBold, fontSize: fontSizes.md },

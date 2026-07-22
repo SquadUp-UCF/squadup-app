@@ -253,7 +253,19 @@ export default function HomeScreen() {
         {isLoading ? (
           <Text style={styles.loading}>Loading games…</Text>
         ) : viewMode === 'map' ? (
-          <GamesMap games={mapGames} onSelect={(id) => router.push(`/game/${id}`)} />
+          <View style={styles.mapWrap}>
+            <GamesMap games={mapGames} onSelect={(id) => router.push(`/game/${id}`)} />
+            {mapGames.length === 0 && (
+              <View style={styles.mapEmpty} pointerEvents="none">
+                <View style={styles.mapEmptyCard}>
+                  <Text style={styles.mapEmptyTitle}>No live games right now</Text>
+                  <Text style={styles.mapEmptySub}>
+                    Games show up here while they’re live or starting within the next few hours.
+                  </Text>
+                </View>
+              </View>
+            )}
+          </View>
         ) : visibleGames.length === 0 ? (
           <View style={styles.empty}>
             <Text style={styles.emptyTitle}>{hasFilters ? 'No games match your filters' : 'No games yet'}</Text>
@@ -398,6 +410,24 @@ const styles = StyleSheet.create({
   empty: { alignItems: 'center', marginTop: 60, gap: 4, paddingHorizontal: spacing.xl },
   emptyTitle: { fontFamily: fonts.headingBold, fontSize: fontSizes.lg, color: colors.text },
   emptySub: { fontFamily: fonts.body, fontSize: fontSizes.md, color: colors.muted, textAlign: 'center' },
+  mapWrap: { flex: 1 },
+  mapEmpty: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
+  mapEmptyCard: {
+    backgroundColor: colors.white,
+    borderRadius: radii.lg,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.xl,
+    alignItems: 'center',
+    gap: 4,
+    maxWidth: 320,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
+  mapEmptyTitle: { fontFamily: fonts.headingBold, fontSize: fontSizes.lg, color: colors.text, textAlign: 'center' },
+  mapEmptySub: { fontFamily: fonts.body, fontSize: fontSizes.md, color: colors.muted, textAlign: 'center' },
   list: { padding: spacing.lg, paddingTop: 0, paddingBottom: 96 },
   createWrap: { position: 'absolute', left: 0, right: 0, bottom: 28, alignItems: 'center' },
   createButton: {
